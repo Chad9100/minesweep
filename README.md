@@ -46,6 +46,7 @@ Columns are letters (`A`, `B`, ... `Z`, `AA`, ...), rows are numbers starting at
 | `r B3` (or just `B3`) | Reveal a cell. Empty cells open their whole region automatically. |
 | `f B3` | Flag or unflag a hidden cell you think is a mine. |
 | `c B3` | Chord: on a revealed number whose mines are all flagged, reveal every other neighbour at once. A wrong flag means you lose. |
+| `u` | Undo your last move (reveal, flag or chord). Repeat to go further back. |
 | `s` | Save the game and quit. Continue later with `minesweep resume`. |
 | `q` | Quit without saving. |
 | `?` | Show the help. |
@@ -160,6 +161,93 @@ On a real terminal the numbers are coloured, hidden cells are shown as a
 middle dot and flags as a flag symbol. When output is piped, or the terminal
 can't show those characters, it falls back to plain ASCII (`.` and `F`) as above.
 
+### Undo
+
+`u` takes back your last move, and you can keep pressing it to step further
+back. The board is rebuilt by replaying your earlier moves on the same mines,
+so it ends up exactly as it was. A few details:
+
+- The clock is not rewound.
+- Undo works while the game is running, not after you have hit a mine.
+- The move history is part of the save file, so you can still undo after
+  `minesweep resume`. Saves made by v0.1 (before undo existed) still load;
+  undo then goes back as far as the position you resumed from.
+- A game in which you used undo is not ranked in `minesweep scores`.
+- If you undo your very first reveal, the mines are lifted again, so the next
+  reveal is a safe first click once more.
+
+Real captured session (`--seed 1`, moves piped in, `MINESWEEP_HOME` set to a
+temporary directory):
+
+```text
+$ minesweep play --seed 1
+New game: beginner 9x9, 10 mines, seed 1. Type ? for help.
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . . . . . . .
+5 . . . . . . . . .
+6 . . . . . . . . .
+7 . . . . . . . . .
+8 . . . . . . . . .
+9 . . . . . . . . .
+Mines left: 10   Time: 0s
+> u
+nothing to undo
+> r E5
+  A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+Mines left: 10   Time: 0s
+> f B9
+  A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . F . . . . . 1
+Mines left: 9   Time: 0s
+> u
+Undid flag B9.
+  A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+Mines left: 10   Time: 0s
+> f A9
+  A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 F . . . . . . 1
+Mines left: 9   Time: 0s
+> q
+Quit without saving.
+```
+
 ### Colour
 
 `--color auto` (the default) colours the numbers only when output is a
@@ -174,7 +262,7 @@ terminal and the `NO_COLOR` environment variable is not set. Use
 | Linux / other | `$XDG_DATA_HOME/minesweep`, or `~/.local/share/minesweep` |
 | Any (override) | `$MINESWEEP_HOME` |
 
-It holds `save.json` (one saved game) and `scores.json` (top 10 times per
+It holds `save.json` (one saved game, including its move history for undo) and `scores.json` (top 10 times per
 difficulty). Both are plain JSON.
 
 ## Development

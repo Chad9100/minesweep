@@ -46,6 +46,7 @@ Commands:
   r B3    reveal a cell (typing just B3 works too)
   f B3    flag or unflag a hidden cell
   c B3    chord: on a number whose mines are all flagged, reveal its other neighbours
+  u       undo your last move (a game where you undo is not ranked)
   s       save the game and quit (continue later with: minesweep resume)
   q       quit without saving
   ?       show this help
@@ -240,6 +241,15 @@ def run_game(board: Board, ctx: _Context, *, color_mode: str = "auto", from_save
             note = " Your earlier save is still there." if from_save else ""
             out.write(f"Quit without saving.{note}\n")
             return 0
+        if cmd in ("u", "undo"):
+            try:
+                action, cell = board.undo()
+            except MoveError as exc:
+                out.write(f"{exc}\n")
+                continue
+            out.write(f"Undid {action} {cell_label(cell)}.\n")
+            redraw = True
+            continue
         if cmd in ("s", "save"):
             path = save_game(board, ctx.environ)
             out.write(f"Game saved to {path}. Continue with: minesweep resume\n")
@@ -284,6 +294,10 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     out.write(f"You win! Cleared in {format_seconds(secs)}.\n")
     if not board.config.ranked:
         out.write("Custom boards are not ranked.\n")
+        return 0
+    if board.undos:
+        times = "once" if board.undos == 1 else f"{board.undos} times"
+        out.write(f"You used undo {times}, so this game is not ranked.\n")
         return 0
     try:
         rank = record_score(

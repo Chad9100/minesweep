@@ -17,7 +17,10 @@ Cell = tuple[int, int]
 Clock = Callable[[], float]
 
 MAX_SIDE = 99
-SAVE_VERSION = 1
+SAVE_VERSION = 2
+READABLE_SAVE_VERSIONS = (1, 2)
+
+MOVE_ACTIONS = ("reveal", "flag", "chord")
 
 PLAYING = "playing"
 WON = "won"
@@ -137,12 +140,18 @@ def parse_coord(text: str, width: int, height: int) -> Cell:
 # ---------------------------------------------------------------------- board
 
 
+Move = tuple[str, Cell]
+
+
 class Board:
     """One game of Minesweeper.
 
     Mines are placed on the first reveal, using ``random.Random(seed)``, so the
     same seed and the same first click always give the same board. ``clock``
     returns seconds (monotonic); the timer starts at the first reveal.
+
+    Every accepted move is kept in ``history`` so :meth:`undo` can take the
+    last one back; ``undos`` counts how often that happened.
     """
 
     def __init__(self, config: Config, seed: int, clock: Clock = time.monotonic):
@@ -157,6 +166,13 @@ class Board:
         self._clock = clock
         self._elapsed = 0.0
         self._started: float | None = None
+        self.history: list[Move] = []
+        self.undos = 0
+        self._fixed_mines = False
+        # Position that ``history`` starts from: empty for a new game, or what
+        # an old (version 1) save held, since its earlier moves are unknown.
+        self.base_revealed: frozenset[Cell] = frozenset()
+        self.base_flagged: frozenset[Cell] = frozenset()
 
     # -- construction helpers -------------------------------------------------
 
@@ -174,6 +190,7 @@ class Board:
         board = cls(make_config(width, height, len(mines)), seed, clock)
         board.mines = mines
         board.mines_placed = True
+        board._fixed_mines = True
         return board
 
     # -- geometry -------------------------------------------------------------
@@ -236,6 +253,7 @@ class Board:
             self._place_mines(cell)
         if self._started is None:
             self._started = self._clock()
+        self.history.append(("reveal", cell))
         if cell in self.mines:
             self._lose(cell)
             return []
@@ -248,6 +266,7 @@ class Board:
         self._check_move(cell)
         if cell in self.revealed:
             raise MoveError(f"{cell_label(cell)} is already revealed and cannot be flagged")
+        self.history.append(("flag", cell))
         if cell in self.flagged:
             self.flagged.discard(cell)
             return False
@@ -272,6 +291,7 @@ class Board:
         targets = [
             n for n in self.neighbors(cell) if n not in self.revealed and n not in self.flagged
         ]
+        self.history.append(("chord", cell))
         for t in targets:
             if t in self.mines:
                 self._lose(t)
@@ -283,7 +303,53 @@ class Board:
         self._check_win()
         return opened
 
+    def undo(self) -> Move:
+        """Take back the last move and return it as ``(action, cell)``.
+
+        The board is rebuilt by replaying the earlier moves on the same mines,
+        so it ends up exactly as it was before that move. The clock is not
+        rewound. If no reveal is left, the mines are lifted again, so the next
+        reveal is a safe first click (same seed and same click give the same
+        board as before).
+        """
+        if self.over:
+            raise MoveError(f"the game is over (you {self.state}); undo works during play")
+        if not self.history:
+            raise MoveError("nothing to undo")
+        last = self.history[-1]
+        self._replay(self.history[:-1])
+        self.undos += 1
+        return last
+
     # -- internals ------------------------------------------------------------
+
+    def _replay(self, moves: list[Move]) -> None:
+        """Reset the board to its base position (keeping the mines) and redo ``moves``."""
+        started, elapsed = self._started, self._elapsed
+        self.revealed, self.flagged = set(self.base_revealed), set(self.base_flagged)
+        self.state, self.exploded = PLAYING, None
+        self.history = []
+        if (
+            not self._fixed_mines
+            and not self.base_revealed
+            and not any(a != "flag" for a, _ in moves)
+        ):
+            self.mines, self.mines_placed = set(), False
+        try:
+            for action, cell in moves:
+                self._apply(action, cell)
+        finally:
+            self._started, self._elapsed = started, elapsed
+
+    def _apply(self, action: str, cell: Cell) -> None:
+        if action == "reveal":
+            self.reveal(cell)
+        elif action == "flag":
+            self.toggle_flag(cell)
+        elif action == "chord":
+            self.chord(cell)
+        else:
+            raise ValueError(f"unknown move {action!r}")
 
     def _check_move(self, cell: Cell) -> None:
         if self.over:
@@ -356,13 +422,21 @@ class Board:
             "state": self.state,
             "exploded": list(self.exploded) if self.exploded else None,
             "elapsed": round(self.elapsed, 3),
+            "history": [[action, x, y] for action, (x, y) in self.history],
+            "undos": self.undos,
+            "base_revealed": sorted(self.base_revealed),
+            "base_flagged": sorted(self.base_flagged),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], clock: Clock = time.monotonic) -> "Board":
-        """Rebuild a board saved by :meth:`to_dict`. Raises ValueError on bad data."""
+        """Rebuild a board saved by :meth:`to_dict`. Raises ValueError on bad data.
+
+        Version 1 saves (before undo existed) load with an empty move history;
+        the loaded position becomes the base that undo can go back to.
+        """
         try:
-            if data.get("version") != SAVE_VERSION:
+            if data.get("version") not in READABLE_SAVE_VERSIONS:
                 raise ValueError(f"unsupported save version {data.get('version')!r}")
             config = make_config(int(data["width"]), int(data["height"]), int(data["mines_total"]))
             board = cls(config, int(data["seed"]), clock)
@@ -389,6 +463,19 @@ class Board:
             exploded = data.get("exploded")
             board.exploded = (int(exploded[0]), int(exploded[1])) if exploded else None
             board._elapsed = float(data.get("elapsed", 0.0))
+            if data["version"] == 1:
+                board.base_revealed = frozenset(board.revealed)
+                board.base_flagged = frozenset(board.flagged)
+            else:
+                board.base_revealed = frozenset(cells("base_revealed"))
+                board.base_flagged = frozenset(cells("base_flagged"))
+                if board.base_revealed & board.base_flagged:
+                    raise ValueError("a base cell cannot be both revealed and flagged")
+            board.history = _parse_history(data.get("history", []), board)
+            board.undos = int(data.get("undos", 0))
+            if board.undos < 0:
+                raise ValueError("undos cannot be negative")
+            _check_history(board)
             if state == PLAYING and board.mines_placed:
                 board._started = clock()
             return board
@@ -396,3 +483,34 @@ class Board:
             raise ValueError(f"malformed save data ({exc.__class__.__name__}: {exc})") from exc
         except ConfigError as exc:
             raise ValueError(f"bad board size in save: {exc}") from exc
+
+
+def _parse_history(raw: Any, board: Board) -> list[Move]:
+    if not isinstance(raw, list):
+        raise ValueError("history must be a list")
+    moves: list[Move] = []
+    for item in raw:
+        action, x, y = item
+        if action not in MOVE_ACTIONS:
+            raise ValueError(f"unknown move {action!r} in history")
+        cell = (int(x), int(y))
+        if not board.in_bounds(cell):
+            raise ValueError(f"history has a cell off the board: {cell}")
+        moves.append((action, cell))
+    return moves
+
+
+def _check_history(board: Board) -> None:
+    """Replaying the saved moves must give the saved position, or undo would lie."""
+    check = Board(board.config, board.seed, lambda: 0.0)
+    check.mines, check.mines_placed = set(board.mines), board.mines_placed
+    check.revealed, check.flagged = set(board.base_revealed), set(board.base_flagged)
+    try:
+        for action, cell in board.history:
+            check._apply(action, cell)
+    except MoveError as exc:
+        raise ValueError(f"history does not replay: {exc}") from exc
+    got = (check.mines, check.revealed, check.flagged, check.state)
+    want = (board.mines, board.revealed, board.flagged, board.state)
+    if got != want:
+        raise ValueError("history does not match the saved board")
