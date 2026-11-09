@@ -231,7 +231,7 @@ def test_ascii_fallback_on_narrow_encoding(clock):
          stderr=Stream(), environ=dict(os.environ), clock=clock)
     text = out.getvalue()
     text.encode("ascii")
-    assert "1 F ." in text
+    assert "1[F]." in text  # the flag is the last move, so it is bracketed
 
 
 def test_end_of_input_quits_without_saving(clock):

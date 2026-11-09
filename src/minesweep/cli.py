@@ -73,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--color", choices=("auto", "always", "never"), default="auto",
         help="colour the numbers (default: auto = only on a terminal without NO_COLOR)",
     )
+    color.add_argument(
+        "--no-echo", dest="echo", action="store_false",
+        help="do not repeat piped commands after the prompt (they are echoed by default "
+        "when input is not a terminal, so transcripts read like a typed session)",
+    )
 
     play = sub.add_parser("play", parents=[color], help="start a new game")
     play.add_argument(
@@ -156,7 +161,7 @@ def _cmd_play(args: argparse.Namespace, ctx: _Context) -> int:
         return 2
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(1, 1_000_000)
     board = Board(config, seed, ctx.clock)
-    return run_game(board, ctx, color_mode=args.color, from_save=False)
+    return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
 
 
 def _cmd_resume(args: argparse.Namespace, ctx: _Context) -> int:
@@ -172,7 +177,7 @@ def _cmd_resume(args: argparse.Namespace, ctx: _Context) -> int:
         delete_save(ctx.environ)
         ctx.err("the saved game was already finished; start a new one with: minesweep play")
         return 1
-    return run_game(board, ctx, color_mode=args.color, from_save=True)
+    return run_game(board, ctx, color_mode=args.color, from_save=True, echo=args.echo)
 
 
 def _cmd_scores(ctx: _Context) -> int:
@@ -198,7 +203,19 @@ def _cmd_scores(ctx: _Context) -> int:
 # ------------------------------------------------------------------ game loop
 
 
-def run_game(board: Board, ctx: _Context, *, color_mode: str = "auto", from_save: bool = False) -> int:
+def run_game(
+    board: Board,
+    ctx: _Context,
+    *,
+    color_mode: str = "auto",
+    from_save: bool = False,
+    echo: bool = True,
+) -> int:
+    """Play until the game ends or the player saves/quits.
+
+    ``echo=False`` turns off repeating piped commands; typed input on a
+    terminal is never echoed (the terminal already shows it).
+    """
     out = ctx.stdout
     color = use_color(color_mode, out, ctx.environ)
     if color:
@@ -211,11 +228,13 @@ def run_game(board: Board, ctx: _Context, *, color_mode: str = "auto", from_save
         f"{verb}: {cfg.difficulty} {cfg.width}x{cfg.height}, {cfg.mines} mines, "
         f"seed {board.seed}. Type ? for help.\n"
     )
-    echo = not _isatty(ctx.stdin)
+    echo = echo and not _isatty(ctx.stdin)
     redraw = True
     while True:
         if redraw:
-            out.write(render_board(board, color=color, glyphs=glyphs) + "\n")
+            last = board.last_move
+            highlight = last[1] if last else None
+            out.write(render_board(board, color=color, glyphs=glyphs, highlight=highlight) + "\n")
             out.write(render_status(board) + "\n")
             redraw = False
         if board.over:

@@ -36,6 +36,7 @@ minesweep play --difficulty expert          # 30x16, 99 mines
 minesweep play --width 20 --height 10 --mines 30   # any custom board
 minesweep play --seed 1                     # same seed + same first click = same board
 minesweep resume                            # continue a saved game
+minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
 ```
 
@@ -93,7 +94,7 @@ Mines left: 10   Time: 0s
 2           2 . . .
 3           1 1 4 .
 4               2 .
-5               1 1
+5        [ ]    1 1
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
@@ -109,7 +110,7 @@ Mines left: 10   Time: 0s
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
-9 F . . . . . . 1
+9[F]. . . . . . 1
 Mines left: 9   Time: 0s
 > c B8
   A B C D E F G H I
@@ -120,7 +121,7 @@ Mines left: 9   Time: 0s
 5               1 1
 6     1 1 1
 7     2 . 2 1 1 1
-8 1 1 2 . . . . 1
+8 1[1]2 . . . . 1
 9 F 1 1 . . . . 1
 Mines left: 9   Time: 0s
 > f B8
@@ -139,7 +140,7 @@ Resuming: beginner 9x9, 10 mines, seed 1. Type ? for help.
 5               1 1
 6     1 1 1
 7     2 . 2 1 1 1
-8 1 1 2 . . . . 1
+8 1[1]2 . . . . 1
 9 F 1 1 . . . . 1
 Mines left: 9   Time: 0s
 > q
@@ -201,7 +202,7 @@ nothing to undo
 2           2 . . .
 3           1 1 4 .
 4               2 .
-5               1 1
+5        [ ]    1 1
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
@@ -217,7 +218,7 @@ Mines left: 10   Time: 0s
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
-9 . F . . . . . 1
+9 .[F]. . . . . 1
 Mines left: 9   Time: 0s
 > u
 Undid flag B9.
@@ -226,7 +227,7 @@ Undid flag B9.
 2           2 . . .
 3           1 1 4 .
 4               2 .
-5               1 1
+5        [ ]    1 1
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
@@ -242,10 +243,77 @@ Mines left: 10   Time: 0s
 6     1 1 1
 7     2 . 2 1 1 1
 8 1 1 2 . . . . 1
-9 F . . . . . . 1
+9[F]. . . . . . 1
 Mines left: 9   Time: 0s
 > q
 Quit without saving.
+```
+
+### Last move and scripted input
+
+After every move the board marks the cell you just played with square
+brackets, so on a big board you can see at a glance where you were: `[F]` for
+a flag, `[ ]` or `[3]` for a reveal, and the number you chorded on for a chord.
+The brackets take the place of the spaces between cells, so the columns stay
+lined up, and they show up without colour too. After `u` the mark moves back to
+the move before; after `minesweep resume` it is restored from the save file's
+move history (saves from v0.1, which have no history, start with no mark).
+
+When input is piped in, the game repeats each command after the `>` prompt so
+a transcript reads like a typed session (that is how the samples above were
+made). If you drive the game from a script and only want its replies, pass
+`--no-echo` to `play` or `resume`. Typed input on a terminal is never echoed
+twice either way. A real captured run:
+
+```text
+$ printf 'r E5\nf A9\nc B8\nZ1\nq\n' | minesweep play --seed 1 --no-echo
+New game: beginner 9x9, 10 mines, seed 1. Type ? for help.
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . . . . . . .
+5 . . . . . . . . .
+6 . . . . . . . . .
+7 . . . . . . . . .
+8 . . . . . . . . .
+9 . . . . . . . . .
+Mines left: 10   Time: 0s
+>   A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5        [ ]    1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+Mines left: 10   Time: 0s
+>   A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9[F]. . . . . . 1
+Mines left: 9   Time: 0s
+>   A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1[1]2 . . . . 1
+9 F 1 1 . . . . 1
+Mines left: 9   Time: 0s
+> column Z is off the board (A-I)
+> Quit without saving.
 ```
 
 ### Colour

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, TextIO
 
-from minesweep.board import LOST, WON, Board, column_label
+from minesweep.board import LOST, WON, Board, Cell, column_label
 
 RESET = "\x1b[0m"
 NUMBER_COLORS = {
@@ -81,10 +81,14 @@ def render_board(
     color: bool = False,
     glyphs: Glyphs = ASCII_GLYPHS,
     show_mines: bool | None = None,
+    highlight: Cell | None = None,
 ) -> str:
     """Render the grid with column letters on top and row numbers on the left.
 
-    ``show_mines`` defaults to True once the game is over.
+    ``show_mines`` defaults to True once the game is over. ``highlight`` puts
+    square brackets around one cell (the last move) in place of the spaces
+    that separate it from its neighbours, so the columns stay aligned and the
+    mark is visible without colour too.
     """
     if show_mines is None:
         show_mines = board.state in (WON, LOST)
@@ -96,11 +100,19 @@ def render_board(
     )
     lines = [header.rstrip()]
     for y in range(board.height):
-        parts = []
+        row = f"{y + 1:>{row_w}}"
         for x in range(board.width):
+            if highlight == (x, y):
+                sep = "["
+            elif highlight == (x - 1, y):
+                sep = "]"
+            else:
+                sep = " "
             text, code = _cell(board, (x, y), glyphs, show_mines)
-            parts.append(_paint(text.rjust(cell_w), code, color))
-        lines.append((f"{y + 1:>{row_w}} " + " ".join(parts)).rstrip())
+            row += sep + _paint(text.rjust(cell_w), code, color)
+        if highlight == (board.width - 1, y):
+            row += "]"
+        lines.append(row.rstrip())
     return "\n".join(lines)
 
 

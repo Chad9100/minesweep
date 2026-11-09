@@ -240,6 +240,15 @@ class Board:
     def over(self) -> bool:
         return self.state != PLAYING
 
+    @property
+    def last_move(self) -> Move | None:
+        """The most recent move still in the history, or None.
+
+        After an undo this is the move before the one taken back. A game
+        resumed from a version 1 save has no history yet, so it is None there.
+        """
+        return self.history[-1] if self.history else None
+
     # -- moves ----------------------------------------------------------------
 
     def reveal(self, cell: Cell) -> list[Cell]:

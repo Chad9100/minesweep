@@ -15,7 +15,7 @@ Estimates are rough working hours for one person, including tests and docs.
 ## v0.2 - undo and quality of life (~3 h)
 
 - [x] `u` undo the last move, with a move history kept in the save file (2 h)
-- [ ] Show the last move's cell highlighted; `--no-echo` for scripted input (1 h)
+- [x] Show the last move's cell highlighted; `--no-echo` for scripted input (1 h)
 
 ## v0.3 - hints and a solver (~5 h)
 
@@ -49,4 +49,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 24 hours.**
+**Total remaining: about 23 hours.**
