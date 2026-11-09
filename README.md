@@ -316,6 +316,75 @@ Mines left: 9   Time: 0s
 > Quit without saving.
 ```
 
+### Solver (for hints, coming next)
+
+`minesweep.solver.analyze(board)` works out which hidden cells the visible
+board *proves* safe and which it proves are mines. It is the groundwork for
+the `h` hint command on the [roadmap](ROADMAP.md) and is not wired into the
+game yet, but you can call it on any board, including a saved game. It only
+uses what a player can see: the numbers on revealed cells and the total mine
+count. It never peeks at where the mines are, and it ignores your flags (a
+flag is a guess, not a fact). Each answer names the rule that found it:
+
+| Rule | Meaning |
+| --- | --- |
+| `single` | A number whose hidden neighbours must all be mines, or must all be safe. |
+| `subset` | One number's hidden neighbours are a subset of another's, so the cells only the bigger one sees hold the difference. |
+| `count` | The same reasoning over the whole board with the mines still unaccounted for (useful in the endgame). |
+| `enumeration` | Every mine arrangement along a stretch of the border is tried; a cell that is the same in all of them is certain. |
+
+Very large border groups that would take too long to enumerate are skipped,
+which only means fewer answers, never a wrong one. When nothing is certain,
+`result.stuck` is true: the next move has to be a guess.
+
+A real run: play a few moves of `--seed 1` and save, then analyse the save
+(`MINESWEEP_HOME` pointed at a temporary `demo-home`).
+
+```text
+$ printf 'r E5\nr H2\nr E8\nr F8\nr G9\nr B9\nr C9\nr D9\ns\n' | minesweep play --seed 1 --no-echo | tail -12
+>   A B C D E F G H I
+1           2 . . .
+2           2 . 5 .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . 2 1 . 1
+9 . 1 1[1]. . 1 1
+Mines left: 10   Time: 0s
+> Game saved to demo-home\save.json. Continue with: minesweep resume
+$ python analyze.py
+ E9 safe (single)
+ F9 safe (single)
+ G1 mine (single)
+ G2 mine (single)
+ I2 mine (single)
+ I3 mine (single)
+ I4 mine (single)
+ D7 mine (single)
+ D8 mine (single)
+ G8 mine (single)
+ A9 mine (single)
+```
+
+H1 and I1 are not listed: one of them is the last mine, and nothing on the
+board can tell which. `analyze.py` is:
+
+```python
+from minesweep.board import cell_label
+from minesweep.solver import analyze
+from minesweep.storage import load_game
+
+board = load_game()
+result = analyze(board)
+for name, found in (("safe", result.safe), ("mine", result.mines)):
+    for cell, rule in sorted(found.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        print(f"{cell_label(cell):>3} {name:<4} ({rule})")
+if result.stuck:
+    print("nothing is certain: the next move is a guess")
+```
+
 ### Colour
 
 `--color auto` (the default) colours the numbers only when output is a
@@ -349,6 +418,8 @@ Layout:
 - `src/minesweep/board.py` - the game rules. Pure logic, no I/O; mine placement
   is deterministic for a given seed and the clock is injectable, so every rule
   is tested without sleeping or randomness.
+- `src/minesweep/solver.py` - constraint solver: which hidden cells the visible
+  board proves safe or mined. Pure logic like `board.py`.
 - `src/minesweep/render.py` - turns a board into text (colour and ASCII fallback).
 - `src/minesweep/storage.py` - save file and best times in the per-user data directory.
 - `src/minesweep/cli.py` - argument parsing and the turn-based game loop.
