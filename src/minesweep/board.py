@@ -11,6 +11,7 @@ import random
 import re
 import time
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Callable, Iterable, Iterator
 
 Cell = tuple[int, int]
@@ -140,6 +141,22 @@ def parse_coord(text: str, width: int, height: int) -> Cell:
     return (x, y)
 
 
+# ---------------------------------------------------------------- daily boards
+
+
+def daily_seed(day: date) -> int:
+    """The seed of the daily challenge for ``day``: the date as YYYYMMDD.
+
+    It is shown to the player, so ``play --seed`` can replay the board later.
+    """
+    return day.year * 10000 + day.month * 100 + day.day
+
+
+def daily_start(config: Config) -> Cell:
+    """The cell a daily challenge opens for the player: the centre of the board."""
+    return (config.width // 2, config.height // 2)
+
+
 # ---------------------------------------------------------------------- board
 
 
@@ -164,6 +181,9 @@ class Board:
     says how that went: None before the mines are placed, True when such a
     board was found, False when none turned up within :data:`NO_GUESS_TRIES`
     (the game then uses the seed's first placement, like a normal game).
+
+    ``daily`` is the ISO date (``"2026-11-09"``) of a daily challenge built by
+    :meth:`daily_challenge`, or None for an ordinary game.
     """
 
     def __init__(
@@ -190,6 +210,7 @@ class Board:
         self.hints = 0
         self.no_guess = no_guess
         self.no_guess_ok: bool | None = None
+        self.daily: str | None = None
         self._fixed_mines = False
         # Position that ``history`` starts from: empty for a new game, or what
         # an old (version 1) save held, since its earlier moves are unknown.
@@ -213,6 +234,27 @@ class Board:
         board.mines = mines
         board.mines_placed = True
         board._fixed_mines = True
+        return board
+
+    @classmethod
+    def daily_challenge(
+        cls, config: Config, day: date, clock: Clock = time.monotonic
+    ) -> "Board":
+        """The daily challenge for ``day``: the same board for everyone.
+
+        Mines depend on the first click, so the board makes that click itself:
+        it reveals :func:`daily_start` with the seed :func:`daily_seed`. That
+        opening becomes the base position, so it cannot be undone (undo would
+        let the player pick a different first click and so a different
+        board), and the clock is left stopped until the player's first reveal.
+        """
+        board = cls(config, daily_seed(day), clock)
+        board.daily = day.isoformat()
+        board.reveal(daily_start(config))
+        board.base_revealed = frozenset(board.revealed)
+        board.history = []
+        board._started = None
+        board._elapsed = 0.0
         return board
 
     # -- geometry -------------------------------------------------------------
@@ -482,6 +524,7 @@ class Board:
             "hints": self.hints,
             "no_guess": self.no_guess,
             "no_guess_ok": self.no_guess_ok,
+            "daily": self.daily,
             "base_revealed": sorted(self.base_revealed),
             "base_flagged": sorted(self.base_flagged),
         }
@@ -527,6 +570,7 @@ class Board:
             if ok not in (None, True, False):
                 raise ValueError(f"no_guess_ok must be true, false or null (got {ok!r})")
             board.no_guess_ok = ok if board.no_guess else None
+            board.daily = _parse_daily(data.get("daily"))  # absent before v0.4
             if data["version"] == 1:
                 board.base_revealed = frozenset(board.revealed)
                 board.base_flagged = frozenset(board.flagged)
@@ -543,13 +587,31 @@ class Board:
             if board.hints < 0:
                 raise ValueError("hints cannot be negative")
             _check_history(board)
-            if state == PLAYING and board.mines_placed:
+            # A daily challenge saved before the player's first reveal (flags
+            # don't start the clock): the clock still waits for that reveal.
+            untouched_daily = (
+                board.daily
+                and board._elapsed == 0
+                and all(action == "flag" for action, _ in board.history)
+            )
+            if state == PLAYING and board.mines_placed and not untouched_daily:
                 board._started = clock()
             return board
         except (KeyError, TypeError, IndexError) as exc:
             raise ValueError(f"malformed save data ({exc.__class__.__name__}: {exc})") from exc
         except ConfigError as exc:
             raise ValueError(f"bad board size in save: {exc}") from exc
+
+
+def _parse_daily(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ValueError(f"daily must be a date like 2026-11-09 or null (got {raw!r})")
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except ValueError:
+        raise ValueError(f"daily must be a date like 2026-11-09 (got {raw!r})") from None
 
 
 def _parse_history(raw: Any, board: Board) -> list[Move]:

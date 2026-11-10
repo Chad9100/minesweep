@@ -7,7 +7,7 @@ import os
 import random
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Callable, Mapping, Sequence, TextIO
 
 from minesweep import __version__
@@ -22,6 +22,7 @@ from minesweep.board import (
     NO_GUESS_TRIES,
     MoveError,
     cell_label,
+    daily_start,
     make_config,
     parse_coord,
 )
@@ -97,6 +98,21 @@ def build_parser() -> argparse.ArgumentParser:
         "guessing (such games are not ranked)",
     )
 
+    daily = sub.add_parser(
+        "daily", parents=[color],
+        help="play the daily challenge: the same board for everyone",
+        description="Play the daily challenge: a board seeded from the UTC date, with "
+        "the centre cell opened for you, so everyone gets the same board.",
+    )
+    daily.add_argument(
+        "--difficulty", "-d", choices=tuple(DIFFICULTIES), default="beginner",
+        help="board preset (default: beginner)",
+    )
+    daily.add_argument(
+        "--date", type=_iso_date, metavar="YYYY-MM-DD",
+        help="play an earlier day's challenge (default: today, UTC)",
+    )
+
     sub.add_parser("resume", parents=[color], help="continue your saved game")
     sub.add_parser("scores", help="show best times per difficulty")
     return parser
@@ -128,6 +144,8 @@ def main(
     try:
         if args.command == "play":
             return _cmd_play(args, ctx)
+        if args.command == "daily":
+            return _cmd_daily(args, ctx)
         if args.command == "resume":
             return _cmd_resume(args, ctx)
         return _cmd_scores(ctx)
@@ -169,6 +187,27 @@ def _cmd_play(args: argparse.Namespace, ctx: _Context) -> int:
         return 2
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(1, 1_000_000)
     board = Board(config, seed, ctx.clock, no_guess=args.no_guess)
+    return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
+
+
+def _iso_date(text: str) -> date:
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a date like 2026-11-09: {text!r}") from None
+
+
+def _cmd_daily(args: argparse.Namespace, ctx: _Context) -> int:
+    now = ctx.now() if ctx.now else datetime.now(timezone.utc)
+    today = now.astimezone(timezone.utc).date()
+    day = args.date or today
+    if day > today:
+        ctx.err(
+            f"the daily challenge for {day.isoformat()} is not out yet "
+            f"(today is {today.isoformat()} UTC)"
+        )
+        return 2
+    board = Board.daily_challenge(DIFFICULTIES[args.difficulty], day, ctx.clock)
     return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
 
 
@@ -231,12 +270,21 @@ def run_game(
     glyphs = pick_glyphs(out)
     cfg = board.config
 
-    verb = "Resuming" if from_save else "New game"
+    if board.daily:
+        verb = f"Resuming daily challenge {board.daily}" if from_save else f"Daily challenge {board.daily}"
+    else:
+        verb = "Resuming" if from_save else "New game"
     mode = ", no guessing" if board.no_guess else ""
     out.write(
         f"{verb}: {cfg.difficulty} {cfg.width}x{cfg.height}, {cfg.mines} mines, "
         f"seed {board.seed}{mode}. Type ? for help.\n"
     )
+    if board.daily and not from_save:
+        start = cell_label(daily_start(cfg))
+        out.write(
+            f"{start} was opened for you, so everyone starts from the same board. "
+            f"The clock starts on your first reveal.\n"
+        )
     echo = echo and not _isatty(ctx.stdin)
     hints_seen: set = set()  # (position, hint) pairs already counted this session
     warned_no_guess = board.no_guess_ok is False  # a resumed game was told already
@@ -333,6 +381,9 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     out.write(f"You win! Cleared in {format_seconds(secs)}.\n")
     if not board.config.ranked:
         out.write("Custom boards are not ranked.\n")
+        return 0
+    if board.daily:
+        out.write("Daily challenges are not entered in the regular best-times table.\n")
         return 0
     used = []
     if board.undos:

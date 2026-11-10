@@ -36,6 +36,7 @@ minesweep play --difficulty expert          # 30x16, 99 mines
 minesweep play --width 20 --height 10 --mines 30   # any custom board
 minesweep play --seed 1                     # same seed + same first click = same board
 minesweep play --no-guess                   # a board you can clear by logic alone
+minesweep daily                             # today's daily challenge, same board for everyone
 minesweep resume                            # continue a saved game
 minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
@@ -62,8 +63,8 @@ Rules in short:
 - You win when every safe cell is revealed (flags are optional). The clock
   starts on your first reveal.
 - Only the standard difficulties are ranked in `minesweep scores`; custom
-  boards, and games where you used undo or a hint or played a no-guess
-  board, are not.
+  boards, daily challenges, and games where you used undo or a hint or
+  played a no-guess board, are not.
 
 Invalid boards are refused with a clear message and exit code 2, for example
 `minesweep play --width 3 --height 3 --mines 9` prints
@@ -501,6 +502,78 @@ $ printf 'r E5\nr C3\nr B2\nr C2\nr D2\nr E1\nr C1\nr B1\nr A3\nr C5\nr C6\nr B7
 Mines left: 0   Time: 0s
 You win! Cleared in 0.0s.
 You used a no-guess board, so this game is not ranked.
+```
+
+### Daily challenge
+
+`minesweep daily` deals the day's challenge: the same board for everyone who
+plays it that day, so you can compare notes (or times) with friends.
+
+- The seed is the UTC date written as `YYYYMMDD` (seed `20261110` on
+  10 November 2026), and the day turns over at midnight UTC, wherever you are.
+- Because mines are placed after the first click, the game makes that click
+  for you: it opens the centre cell (E5 on beginner, I9 on intermediate, P9 on
+  expert), which is always an empty cell with an open area around it. That
+  opening cannot be undone, and the clock starts on your first own reveal.
+- `--difficulty` / `-d` picks the board size (default beginner), and
+  `--date YYYY-MM-DD` replays an earlier day's challenge. Dates after today
+  (UTC) are refused with exit code 2.
+- A daily is an ordinary game otherwise: `u`, `h`, save and `minesweep resume`
+  all work, and the save remembers which day's challenge it is (saves from
+  earlier versions load as normal games). You can also replay a daily as a
+  normal game with `minesweep play --seed 20261110` and `r E5`.
+- Daily wins are not entered in the regular best-times table.
+
+Real captured session, played on 10 November 2026 (UTC) with the moves piped
+in and `MINESWEEP_HOME` set to a temporary `demo-home`:
+
+```text
+$ printf 'u\nf G8\nr G9\ns\n' | minesweep daily
+Daily challenge 2026-11-10: beginner 9x9, 10 mines, seed 20261110. Type ? for help.
+E5 was opened for you, so everyone starts from the same board. The clock starts on your first reveal.
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . 2 2 2 1 1 .
+5 . . . 2       1 .
+6 . . . 2       1 .
+7 . . . 2   1 1 1 .
+8 . . . 2   1 . . .
+9 . . . 1   1 . . .
+Mines left: 10   Time: 0s
+> u
+nothing to undo
+> f G8
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . 2 2 2 1 1 .
+5 . . . 2       1 .
+6 . . . 2       1 .
+7 . . . 2   1 1 1 .
+8 . . . 2   1[F]. .
+9 . . . 1   1 . . .
+Mines left: 9   Time: 0s
+> r G9
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . 2 2 2 1 1 .
+5 . . . 2       1 .
+6 . . . 2       1 .
+7 . . . 2   1 1 1 .
+8 . . . 2   1 F . .
+9 . . . 1   1[1]. .
+Mines left: 9   Time: 0s
+> s
+Game saved to demo-home\save.json. Continue with: minesweep resume
+$ minesweep resume
+Resuming daily challenge 2026-11-10: beginner 9x9, 10 mines, seed 20261110. Type ? for help.
+$ minesweep daily --date 2026-11-11
+minesweep: error: the daily challenge for 2026-11-11 is not out yet (today is 2026-11-10 UTC)
 ```
 
 ### Solver

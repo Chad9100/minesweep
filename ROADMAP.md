@@ -31,8 +31,17 @@ Estimates are rough working hours for one person, including tests and docs.
 
 ## v0.4 - daily seeded challenge (~3 h)
 
-- [ ] `minesweep daily`: seed derived from the UTC date, same board for everyone (1.5 h)
+- [x] `minesweep daily`: seed derived from the UTC date, same board for everyone (1.5 h)
+      (seed = the date as YYYYMMDD; the centre cell is opened for you so the board
+      does not depend on your first click; `--date` replays earlier days, future
+      dates are refused; the date is kept in the save; not in the regular table)
 - [ ] Separate daily leaderboard and a shareable one-line result (1.5 h)
+
+## v0.4.1 - input fixes (~0.5 h)
+
+- [ ] Strip a UTF-8 byte order mark from piped input: Windows PowerShell's
+      `'r E5' | minesweep play` prefixes the first line with U+FEFF, so the
+      first command is rejected as unknown (0.5 h)
 
 ## v0.5 - statistics (~3 h)
 
@@ -55,4 +64,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 18 hours.**
+**Total remaining: about 17 hours.**
