@@ -23,6 +23,7 @@ from minesweep.board import DIFFICULTIES, Board, Clock
 SAVE_NAME = "save.json"
 SCORES_NAME = "scores.json"
 MAX_SCORES = 10
+RECORD_VERSION = 1  # format of scores.json, daily.json and stats.json
 
 
 class StorageError(Exception):
@@ -65,6 +66,27 @@ def _read_json(path: Path) -> Any:
         raise
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise StorageError(f"cannot read {path}: {exc}") from exc
+
+
+def _stamped(data: Mapping[str, Any]) -> dict[str, Any]:
+    """The record file's contents with its format version first."""
+    return {"version": RECORD_VERSION, **data}
+
+
+def _check_record_version(path: Path, data: dict[str, Any]) -> None:
+    """Refuse a record file written by a newer minesweep.
+
+    Files written before versions existed have no ``version`` and are read as
+    version 1, which is the same layout.
+    """
+    version = data.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise StorageError(f"{path} has an invalid format version {version!r}")
+    if version > RECORD_VERSION:
+        raise StorageError(
+            f"{path} was written by a newer minesweep (format version {version}, "
+            f"this one reads up to {RECORD_VERSION}); upgrade minesweep or delete the file"
+        )
 
 
 # ----------------------------------------------------------------------- saves
@@ -111,6 +133,7 @@ def load_scores(environ: Mapping[str, str] | None = None) -> dict[str, list[dict
         data = {}
     if not isinstance(data, dict):
         raise StorageError(f"{path} is not a minesweep scores file")
+    _check_record_version(path, data)
     out: dict[str, list[dict[str, Any]]] = {}
     for name in DIFFICULTIES:
         entries = data.get(name, [])
@@ -144,7 +167,7 @@ def record_score(
     entries.sort(key=lambda e: e["seconds"])  # stable: earlier ties stay ahead
     entries = entries[:MAX_SCORES]
     scores[difficulty] = entries
-    _write_json(scores_path(environ), scores)
+    _write_json(scores_path(environ), _stamped(scores))
     for i, e in enumerate(entries):
         if e is entry:
             return i + 1
@@ -181,6 +204,7 @@ def load_daily(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, 
         data = {}
     if not isinstance(data, dict):
         raise StorageError(f"{path} is not a minesweep daily results file")
+    _check_record_version(path, data)
     out: dict[str, dict[str, dict[str, Any]]] = {}
     for name in DIFFICULTIES:
         days = data.get(name, {})
@@ -219,7 +243,7 @@ def record_daily(
         "safe": int(safe),
     }
     results[difficulty] = dict(sorted(days.items()))
-    _write_json(daily_path(environ), results)
+    _write_json(daily_path(environ), _stamped(results))
     return True
 
 
@@ -277,6 +301,7 @@ def load_stats(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, 
         data = {}
     if not isinstance(data, dict):
         raise StorageError(f"{path} is not a minesweep statistics file")
+    _check_record_version(path, data)
     return {name: _clean_stats(data.get(name)) for name in DIFFICULTIES}
 
 
@@ -301,7 +326,7 @@ def record_game(
         entry["win_seconds"] = round(entry["win_seconds"] + float(seconds), 2)
     else:
         entry["streak"] = 0
-    _write_json(stats_path(environ), stats)
+    _write_json(stats_path(environ), _stamped(stats))
     return entry
 
 

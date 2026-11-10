@@ -827,6 +827,10 @@ terminal and the `NO_COLOR` environment variable is not set. Use
 It holds `save.json` (one saved game, including its move history for undo), `scores.json` (top 10 times per
 difficulty) and `daily.json` (your first result for each daily challenge) and `stats.json` (games
 played and won, streaks and total winning time per difficulty). All are plain JSON.
+`scores.json`, `daily.json` and `stats.json` carry a `"version"` number (currently 1); files
+without one are read as version 1. If a file was written by a newer minesweep, this one stops
+with an error naming the file instead of overwriting it. Upgrade, or delete the file. Release
+history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 

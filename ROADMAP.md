@@ -87,6 +87,14 @@ and mouse clicks") is split into the three steps below.
 ## v1.0 - release on PyPI (~2 h)
 
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
-- [ ] Changelog, versioned save format migration, final docs pass (1 h)
+- [x] Changelog and a format version on the score, daily and stats files (1 h)
+      (`CHANGELOG.md`; `"version": 1` is written to `scores.json`, `daily.json`
+      and `stats.json`, unversioned files read as 1, newer ones are refused and
+      left untouched; `save.json` already had versions 1 and 2)
+- [ ] Final docs pass and bump the version from 0.1.0 for the first release (0.5 h)
+- [ ] Windows terminal check: run `--tui` and colours on a real console and
+      note findings in the README (1 h)
+- [ ] `minesweep export` / `import` of records to one JSON file, for moving
+      between machines (1.5 h)
 
-**Total remaining: about 6 hours.**
+**Total remaining: about 6.5 hours.**
