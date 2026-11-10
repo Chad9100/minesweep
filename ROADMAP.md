@@ -79,10 +79,19 @@ and mouse clicks") is split into the three steps below.
 - [x] Keep the turn-based mode as the default and dependency-free (1 h)
       (`--tui` is opt-in; curses is imported only when it is used)
 
-## v0.7 - hex boards (~4 h)
+## v0.7 - hex boards (~6 h)
 
-- [ ] Hexagonal grid geometry (6 neighbours) behind the same board API (2.5 h)
-- [ ] Rendering and coordinates for offset hex rows (1.5 h)
+The two original items are split into the steps below.
+
+- [x] Hexagonal grid geometry: odd-r offset rows, 6 neighbours, distance (1 h)
+      (`minesweep.hexgrid`, standalone and pure; not yet used by `Board`)
+- [x] Text layout for offset hex rows: `render_hex_grid` (0.5 h)
+- [ ] `Board` takes a grid kind and uses hex neighbours for counts, flood
+      fill and chording, with the save format bumped (1.5 h)
+- [ ] `play --hex`: hex rendering with colour/highlight, coordinates and
+      records kept separate from square boards (1 h)
+- [ ] Solver support for hex neighbourhoods (1 h)
+- [ ] `--tui` hex drawing and mouse hit-testing (1 h)
 
 ## v1.0 - release on PyPI (~2 h)
 
@@ -99,4 +108,4 @@ and mouse clicks") is split into the three steps below.
       (best times, daily results and stats; import merges: scores combined to
       the top 10, existing daily days kept, stats keep the larger record)
 
-**Total remaining: about 5 hours.**
+**Total remaining: about 9 hours.**

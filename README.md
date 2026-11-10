@@ -873,6 +873,8 @@ Layout:
   is tested without sleeping or randomness.
 - `src/minesweep/solver.py` - constraint solver: which hidden cells the visible
   board proves safe or mined. Pure logic like `board.py`.
+- `src/minesweep/hexgrid.py` - hexagonal grid geometry (six neighbours, odd rows
+  shifted right) and its text layout; groundwork for hex boards, not playable yet.
 - `src/minesweep/render.py` - turns a board into text (colour and ASCII fallback).
 - `src/minesweep/storage.py` - save file, best times, daily results and statistics in the
   per-user data directory.

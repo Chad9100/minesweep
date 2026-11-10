@@ -26,6 +26,10 @@ below has a release number; the headings follow the roadmap stages.
   written by a newer minesweep is refused with a clear message instead of being
   overwritten. Files without the field (all earlier ones) load as version 1.
 
+- `minesweep.hexgrid`: hexagonal grid geometry (odd-r offset rows, six
+  neighbours, distance) and a text layout for it. A building block for hex
+  boards; the game itself does not use it yet.
+
 ### Fixed
 
 - A UTF-8 byte order mark on piped input (Windows PowerShell) no longer makes
