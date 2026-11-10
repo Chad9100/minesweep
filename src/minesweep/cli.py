@@ -311,6 +311,7 @@ def run_game(
         if not line:
             out.write("\nEnd of input; game not saved.\n")
             return 0
+        line = strip_bom(line)
         if echo:  # scripted input: show the command so the transcript reads well
             out.write(line if line.endswith("\n") else line + "\n")
         words = line.split()
@@ -437,6 +438,24 @@ def _hint_text(board: Board, seen: set) -> str:
         what = f"{label} is flagged but safe. Unflag it: f {label}"
     count = "1 hint" if board.hints == 1 else f"{board.hints} hints"
     return f"Hint ({hint.rule} rule): {what}  ({count} used, so this game is not ranked)"
+
+
+# A UTF-8 byte order mark as read through a UTF-8 stream, and as the three
+# characters it becomes when piped input is decoded with Windows-1252 (what
+# Python uses for a pipe on a Western-locale Windows without UTF-8 mode).
+_BOMS = ("﻿", "ï»¿")
+
+
+def strip_bom(line: str) -> str:
+    """Drop a byte order mark from the start of an input line.
+
+    Windows PowerShell can prefix piped text with one (``'r E5' | minesweep
+    play``), which would otherwise turn the first command into an unknown one.
+    """
+    for bom in _BOMS:
+        if line.startswith(bom):
+            return line[len(bom):]
+    return line
 
 
 def _isatty(stream: TextIO) -> bool:

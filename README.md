@@ -267,7 +267,9 @@ When input is piped in, the game repeats each command after the `>` prompt so
 a transcript reads like a typed session (that is how the samples above were
 made). If you drive the game from a script and only want its replies, pass
 `--no-echo` to `play` or `resume`. Typed input on a terminal is never echoed
-twice either way. A real captured run:
+twice either way. A UTF-8 byte order mark at the start of a line, which Windows
+PowerShell can put in front of piped text (`'r E5', 'q' | minesweep play`), is
+ignored rather than making the first command unknown. A real captured run:
 
 ```text
 $ printf 'r E5\nf A9\nc B8\nZ1\nq\n' | minesweep play --seed 1 --no-echo

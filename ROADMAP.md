@@ -39,9 +39,11 @@ Estimates are rough working hours for one person, including tests and docs.
 
 ## v0.4.1 - input fixes (~0.5 h)
 
-- [ ] Strip a UTF-8 byte order mark from piped input: Windows PowerShell's
+- [x] Strip a UTF-8 byte order mark from piped input: Windows PowerShell's
       `'r E5' | minesweep play` prefixes the first line with U+FEFF, so the
       first command is rejected as unknown (0.5 h)
+      (a leading mark is dropped from each input line, both as U+FEFF and as the
+      `ï»¿` it becomes when a pipe is decoded as Windows-1252)
 
 ## v0.5 - statistics (~3 h)
 
@@ -64,4 +66,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 17 hours.**
+**Total remaining: about 16.5 hours.**
