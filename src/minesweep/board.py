@@ -22,6 +22,9 @@ READABLE_SAVE_VERSIONS = (1, 2)
 
 MOVE_ACTIONS = ("reveal", "flag", "chord")
 
+# How many placements a no-guess board tries before settling for a normal one.
+NO_GUESS_TRIES = 1000
+
 PLAYING = "playing"
 WON = "won"
 LOST = "lost"
@@ -154,9 +157,23 @@ class Board:
     last one back; ``undos`` counts how often that happened. ``hints`` counts
     the hints the player asked for (the solver lives in :mod:`minesweep.solver`;
     the board only keeps the tally so it survives a save).
+
+    With ``no_guess=True`` the first reveal keeps drawing placements from the
+    seed's random sequence until the solver can clear the board from that
+    click without ever guessing (see :meth:`_place_mines`). ``no_guess_ok``
+    says how that went: None before the mines are placed, True when such a
+    board was found, False when none turned up within :data:`NO_GUESS_TRIES`
+    (the game then uses the seed's first placement, like a normal game).
     """
 
-    def __init__(self, config: Config, seed: int, clock: Clock = time.monotonic):
+    def __init__(
+        self,
+        config: Config,
+        seed: int,
+        clock: Clock = time.monotonic,
+        *,
+        no_guess: bool = False,
+    ):
         self.config = config
         self.seed = seed
         self.mines: set[Cell] = set()
@@ -171,6 +188,8 @@ class Board:
         self.history: list[Move] = []
         self.undos = 0
         self.hints = 0
+        self.no_guess = no_guess
+        self.no_guess_ok: bool | None = None
         self._fixed_mines = False
         # Position that ``history`` starts from: empty for a new game, or what
         # an old (version 1) save held, since its earlier moves are unknown.
@@ -347,6 +366,8 @@ class Board:
             and not any(a != "flag" for a, _ in moves)
         ):
             self.mines, self.mines_placed = set(), False
+            if self.no_guess:
+                self.no_guess_ok = None
         try:
             for action, cell in moves:
                 self._apply(action, cell)
@@ -370,7 +391,14 @@ class Board:
             raise MoveError(f"{cell} is off the board")
 
     def _place_mines(self, first: Cell) -> None:
-        """Place mines avoiding ``first`` and, when there is room, its neighbours."""
+        """Place mines avoiding ``first`` and, when there is room, its neighbours.
+
+        A normal game takes the first sample from ``random.Random(seed)``. A
+        no-guess game keeps sampling from that same generator until the solver
+        can finish the board from ``first`` by logic alone, so the result is
+        still fully determined by the seed and the first click (and the
+        seed's first placement is used when it already qualifies).
+        """
         zone = {first, *self.neighbors(first)}
         if self.config.cells - len(zone) < self.config.mines:
             zone = {first}
@@ -381,7 +409,22 @@ class Board:
             if (x, y) not in zone
         ]
         rng = random.Random(self.seed)
-        self.mines = set(rng.sample(candidates, self.config.mines))
+        mines = set(rng.sample(candidates, self.config.mines))
+        if self.no_guess:
+            # Imported here: the solver module imports this one.
+            from minesweep.solver import solves_without_guessing
+
+            first_try = mines
+            self.no_guess_ok = False
+            for attempt in range(NO_GUESS_TRIES):
+                if attempt:
+                    mines = set(rng.sample(candidates, self.config.mines))
+                if solves_without_guessing(self.config, mines, first):
+                    self.no_guess_ok = True
+                    break
+            else:
+                mines = first_try
+        self.mines = mines
         self.mines_placed = True
 
     def _flood(self, start: Cell) -> list[Cell]:
@@ -437,6 +480,8 @@ class Board:
             "history": [[action, x, y] for action, (x, y) in self.history],
             "undos": self.undos,
             "hints": self.hints,
+            "no_guess": self.no_guess,
+            "no_guess_ok": self.no_guess_ok,
             "base_revealed": sorted(self.base_revealed),
             "base_flagged": sorted(self.base_flagged),
         }
@@ -476,6 +521,12 @@ class Board:
             exploded = data.get("exploded")
             board.exploded = (int(exploded[0]), int(exploded[1])) if exploded else None
             board._elapsed = float(data.get("elapsed", 0.0))
+            # Both absent before v0.3 no-guess boards: a normal game.
+            board.no_guess = bool(data.get("no_guess", False))
+            ok = data.get("no_guess_ok")
+            if ok not in (None, True, False):
+                raise ValueError(f"no_guess_ok must be true, false or null (got {ok!r})")
+            board.no_guess_ok = ok if board.no_guess else None
             if data["version"] == 1:
                 board.base_revealed = frozenset(board.revealed)
                 board.base_flagged = frozenset(board.flagged)

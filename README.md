@@ -35,6 +35,7 @@ minesweep play --difficulty intermediate    # 16x16, 40 mines
 minesweep play --difficulty expert          # 30x16, 99 mines
 minesweep play --width 20 --height 10 --mines 30   # any custom board
 minesweep play --seed 1                     # same seed + same first click = same board
+minesweep play --no-guess                   # a board you can clear by logic alone
 minesweep resume                            # continue a saved game
 minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
@@ -61,7 +62,8 @@ Rules in short:
 - You win when every safe cell is revealed (flags are optional). The clock
   starts on your first reveal.
 - Only the standard difficulties are ranked in `minesweep scores`; custom
-  boards, and games where you used undo or a hint, are not.
+  boards, and games where you used undo or a hint or played a no-guess
+  board, are not.
 
 Invalid boards are refused with a clear message and exit code 2, for example
 `minesweep play --width 3 --height 3 --mines 9` prints
@@ -420,6 +422,86 @@ Quit without saving. Your earlier save is still there.
 
 After `f A9` the hint moves to B9, right next to the flag, rather than a safe
 cell further away.
+
+### No-guess boards
+
+Some random boards end in a pure coin flip: the seed 1 board above finishes
+with one mine in either H1 or I1 and nothing on the board can tell which.
+`minesweep play --no-guess` avoids that. When you make your first reveal, the
+game keeps drawing mine placements until the [solver](#solver) can clear the
+whole board from that click using logic alone, so every position has at least
+one provably safe cell to reveal (and `h` can always name one).
+
+- It is still reproducible: the placements come from the seed's own random
+  sequence, so the same seed and the same first click give the same board.
+  If the seed's normal board already qualifies, you get exactly that board.
+- The search is quick: a few milliseconds on beginner, typically well under a
+  second on expert. It gives up after 1000 placements (for example on a tiny,
+  crowded custom board where every layout is a coin flip); you are told, and
+  the game goes on with the normal board for that seed.
+- No-guess games are not ranked in `minesweep scores`, because they are
+  easier than the classic boards the table is for.
+- The mode is kept in the save file. Saves from earlier versions load as
+  normal games. Undoing your first reveal and making it again rebuilds the
+  same no-guess board.
+
+Real captured session: the same `--seed 1` and first click as above, now with
+`--no-guess` (`MINESWEEP_HOME` set to a temporary `demo-home`).
+
+```text
+$ printf 'r E5\nh\ns\n' | minesweep play --seed 1 --no-guess
+New game: beginner 9x9, 10 mines, seed 1, no guessing. Type ? for help.
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . . . . . . .
+5 . . . . . . . . .
+6 . . . . . . . . .
+7 . . . . . . . . .
+8 . . . . . . . . .
+9 . . . . . . . . .
+Mines left: 10   Time: 0s
+> r E5
+  A B C D E F G H I
+1 . . . . . 1
+2 . . . . . 1
+3 . . . 2 1 1
+4 . . . 1
+5 . . . 1[ ]
+6 . . . 1 1 1
+7 . . . . . 1   1 1
+8 . . . . 3 1   1 .
+9 . . . . 2     1 .
+Mines left: 10   Time: 0s
+> h
+Hint (single rule): C3 is safe. Reveal it: r C3  (1 hint used, so this game is not ranked)
+> s
+Game saved to demo-home\save.json. Continue with: minesweep resume
+$ minesweep resume
+Resuming: beginner 9x9, 10 mines, seed 1, no guessing. Type ? for help.
+```
+
+Following the hints all the way, every move is a certain reveal and the 24th
+wins; no flag is ever needed. The end of that real run:
+
+```text
+$ printf 'r E5\nr C3\nr B2\nr C2\nr D2\nr E1\nr C1\nr B1\nr A3\nr C5\nr C6\nr B7\nr C7\nr D7\nr C8\nr B9\nr A8\nr A7\nr A6\nr A5\nr B6\nr A9\nr C9\nr I9\n' \
+    | minesweep play --seed 1 --no-guess --no-echo | tail -13
+>   A B C D E F G H I
+1 F 1 1 F 2 1
+2 1 1 1 2 F 1
+3   1 1 2 1 1
+4 1 2 F 1
+5 1 F 2 1
+6 1 1 1 1 1 1
+7 1 1 2 2 F 1   1 1
+8 1 F 3 F 3 1   1 F
+9 1 1 3 F 2     1[1]
+Mines left: 0   Time: 0s
+You win! Cleared in 0.0s.
+You used a no-guess board, so this game is not ranked.
+```
 
 ### Solver
 

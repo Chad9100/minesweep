@@ -19,6 +19,7 @@ from minesweep.board import (
     Clock,
     ConfigError,
     CoordError,
+    NO_GUESS_TRIES,
     MoveError,
     cell_label,
     make_config,
@@ -90,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
     play.add_argument("--height", type=int, help="custom number of rows")
     play.add_argument("--mines", type=int, help="custom number of mines")
     play.add_argument("--seed", type=int, help="seed for a reproducible board")
+    play.add_argument(
+        "--no-guess", action="store_true",
+        help="only deal boards the solver can clear from your first click without "
+        "guessing (such games are not ranked)",
+    )
 
     sub.add_parser("resume", parents=[color], help="continue your saved game")
     sub.add_parser("scores", help="show best times per difficulty")
@@ -162,7 +168,7 @@ def _cmd_play(args: argparse.Namespace, ctx: _Context) -> int:
         ctx.err(str(exc))
         return 2
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(1, 1_000_000)
-    board = Board(config, seed, ctx.clock)
+    board = Board(config, seed, ctx.clock, no_guess=args.no_guess)
     return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
 
 
@@ -226,14 +232,22 @@ def run_game(
     cfg = board.config
 
     verb = "Resuming" if from_save else "New game"
+    mode = ", no guessing" if board.no_guess else ""
     out.write(
         f"{verb}: {cfg.difficulty} {cfg.width}x{cfg.height}, {cfg.mines} mines, "
-        f"seed {board.seed}. Type ? for help.\n"
+        f"seed {board.seed}{mode}. Type ? for help.\n"
     )
     echo = echo and not _isatty(ctx.stdin)
     hints_seen: set = set()  # (position, hint) pairs already counted this session
+    warned_no_guess = board.no_guess_ok is False  # a resumed game was told already
     redraw = True
     while True:
+        if board.no_guess_ok is False and not warned_no_guess:
+            out.write(
+                f"No board for this first click could be solved without guessing "
+                f"in {NO_GUESS_TRIES} tries, so this one may need a guess.\n"
+            )
+            warned_no_guess = True
         if redraw:
             last = board.last_move
             highlight = last[1] if last else None
@@ -325,6 +339,8 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
         used.append("undo " + ("once" if board.undos == 1 else f"{board.undos} times"))
     if board.hints:
         used.append("1 hint" if board.hints == 1 else f"{board.hints} hints")
+    if board.no_guess:
+        used.append("a no-guess board")
     if used:
         out.write(f"You used {' and '.join(used)}, so this game is not ranked.\n")
         return 0

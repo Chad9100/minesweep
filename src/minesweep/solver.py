@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from minesweep.board import Board, Cell
+from minesweep.board import WON, Board, Cell, Config
 
 SINGLE = "single"
 SUBSET = "subset"
@@ -283,6 +283,38 @@ def _enumerate_group(
         for i, c in enumerate(order)
         if mine_hits[i] in (0, solutions)
     }
+
+
+def solves_without_guessing(
+    config: Config,
+    mines: set[Cell] | frozenset[Cell],
+    first: Cell,
+    *,
+    step_budget: int = DEFAULT_STEP_BUDGET,
+) -> bool:
+    """True if a player who reveals ``first`` can clear the board by logic alone.
+
+    Plays the board on a scratch copy: reveal ``first``, then keep revealing
+    every cell :func:`analyze` proves safe until the board is won (True) or
+    nothing is certain any more (False, the player would have to guess).
+    Flags are never needed: the solver ignores them, and proven mines simply
+    stay hidden. Uses the same rules and step budget as the ``h`` hint, so on
+    a board that passes, a hint can always name a safe cell to reveal.
+    """
+    board = Board(config, 0, lambda: 0.0)
+    board.mines = set(mines)
+    board.mines_placed = True
+    if first in board.mines:
+        return False
+    board.reveal(first)
+    while not board.over:
+        safe = [c for c in analyze(board, step_budget=step_budget).safe if c not in board.revealed]
+        if not safe:
+            return False
+        for cell in safe:
+            if cell not in board.revealed:  # an earlier flood may have opened it
+                board.reveal(cell)
+    return board.state == WON
 
 
 # ----------------------------------------------------------------------- hints
