@@ -35,7 +35,10 @@ Estimates are rough working hours for one person, including tests and docs.
       (seed = the date as YYYYMMDD; the centre cell is opened for you so the board
       does not depend on your first click; `--date` replays earlier days, future
       dates are refused; the date is kept in the save; not in the regular table)
-- [ ] Separate daily leaderboard and a shareable one-line result (1.5 h)
+- [x] Separate daily leaderboard and a shareable one-line result (1.5 h)
+      (`daily.json` keeps only the first finished attempt per day and difficulty;
+      `Share:` line on every finished daily; `minesweep scores --daily` ranks
+      unassisted wins; undo/hint wins are recorded as assisted)
 
 ## v0.4.1 - input fixes (~0.5 h)
 
@@ -66,4 +69,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 16.5 hours.**
+**Total remaining: about 15 hours.**

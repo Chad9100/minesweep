@@ -40,6 +40,7 @@ minesweep daily                             # today's daily challenge, same boar
 minesweep resume                            # continue a saved game
 minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
+minesweep scores --daily                    # your daily challenge results
 ```
 
 Columns are letters (`A`, `B`, ... `Z`, `AA`, ...), rows are numbers starting at 1.
@@ -524,7 +525,48 @@ plays it that day, so you can compare notes (or times) with friends.
   all work, and the save remembers which day's challenge it is (saves from
   earlier versions load as normal games). You can also replay a daily as a
   normal game with `minesweep play --seed 20261110` and `r E5`.
-- Daily wins are not entered in the regular best-times table.
+- Daily wins are not entered in the regular best-times table. They go in a
+  separate daily table instead, see below.
+
+When a daily ends, win or lose, the game records the result and prints a
+one-line summary you can paste to friends. It gives nothing away about where
+the mines are:
+
+```text
+Share: minesweep daily 2026-11-09 beginner: cleared in 41.2s
+Share: minesweep daily 2026-11-09 beginner: hit a mine after 0.0s, 56/71 safe cells open (78%)
+```
+
+- Only your **first finished attempt** at a day's challenge counts, so
+  replaying a day after seeing its mines cannot improve it. A replay says
+  `You already finished the 2026-11-09 beginner daily; only your first result
+  counts.` and repeats the first result's line. Quitting or saving does not
+  finish a daily, so nothing is recorded until you win or lose.
+- The cells in the opening the game makes for you count towards "safe cells
+  open".
+- A win where you used undo or a hint is recorded and shared with
+  `(assisted)`, but it is not ranked.
+- `minesweep scores --daily` shows, per difficulty, how many dailies you
+  played and won, your 10 fastest unassisted daily wins (ties go to the
+  earlier day), and the share line of your latest day.
+
+Real output after the losing game above:
+
+```text
+$ minesweep scores --daily
+Daily challenge results (only your first attempt each day counts)
+
+beginner (9x9, 10 mines)
+  played 1, won 0
+  no ranked wins yet (wins with undo or a hint are not ranked)
+  latest: minesweep daily 2026-11-09 beginner: hit a mine after 0.0s, 56/71 safe cells open (78%)
+
+intermediate (16x16, 40 mines)
+  not played yet
+
+expert (30x16, 99 mines)
+  not played yet
+```
 
 Real captured session, played on 10 November 2026 (UTC) with the moves piped
 in and `MINESWEEP_HOME` set to a temporary `demo-home`:
@@ -661,8 +703,8 @@ terminal and the `NO_COLOR` environment variable is not set. Use
 | Linux / other | `$XDG_DATA_HOME/minesweep`, or `~/.local/share/minesweep` |
 | Any (override) | `$MINESWEEP_HOME` |
 
-It holds `save.json` (one saved game, including its move history for undo) and `scores.json` (top 10 times per
-difficulty). Both are plain JSON.
+It holds `save.json` (one saved game, including its move history for undo), `scores.json` (top 10 times per
+difficulty) and `daily.json` (your first result for each daily challenge). All are plain JSON.
 
 ## Development
 

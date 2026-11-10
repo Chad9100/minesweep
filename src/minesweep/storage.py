@@ -149,3 +149,88 @@ def record_score(
         if e is entry:
             return i + 1
     return None
+
+
+# ----------------------------------------------------------------- daily results
+
+DAILY_NAME = "daily.json"
+
+
+def daily_path(environ: Mapping[str, str] | None = None) -> Path:
+    return data_dir(environ) / DAILY_NAME
+
+
+def _valid_daily_entry(entry: Any) -> bool:
+    return (
+        isinstance(entry, dict)
+        and entry.get("result") in ("won", "lost")
+        and isinstance(entry.get("seconds"), (int, float))
+    )
+
+
+def load_daily(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, dict[str, Any]]]:
+    """First daily result per difficulty, keyed by ISO date.
+
+    Each entry is ``{"result": "won"|"lost", "seconds": float, "assisted":
+    bool, "cleared": int, "safe": int}``. Malformed entries are skipped.
+    """
+    path = daily_path(environ)
+    try:
+        data = _read_json(path)
+    except FileNotFoundError:
+        data = {}
+    if not isinstance(data, dict):
+        raise StorageError(f"{path} is not a minesweep daily results file")
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for name in DIFFICULTIES:
+        days = data.get(name, {})
+        if not isinstance(days, dict):
+            raise StorageError(f"{path}: entry for {name} is not an object")
+        out[name] = {day: e for day, e in days.items() if _valid_daily_entry(e)}
+    return out
+
+
+def record_daily(
+    difficulty: str,
+    day: str,
+    *,
+    won: bool,
+    seconds: float,
+    assisted: bool,
+    cleared: int,
+    safe: int,
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Store the result of a finished daily challenge.
+
+    Only the first finished attempt at a day's challenge counts, so a replay
+    (after seeing where the mines are) cannot improve it. Returns True if this
+    result was stored, False if that day was already played.
+    """
+    results = load_daily(environ)
+    days = results[difficulty]
+    if day in days:
+        return False
+    days[day] = {
+        "result": "won" if won else "lost",
+        "seconds": round(float(seconds), 2),
+        "assisted": bool(assisted),
+        "cleared": int(cleared),
+        "safe": int(safe),
+    }
+    results[difficulty] = dict(sorted(days.items()))
+    _write_json(daily_path(environ), results)
+    return True
+
+
+def daily_leaderboard(
+    results: Mapping[str, Mapping[str, Any]], limit: int = MAX_SCORES
+) -> list[tuple[str, float]]:
+    """The fastest unassisted daily wins as ``(date, seconds)``; ties go to the earlier day."""
+    wins = [
+        (day, float(e["seconds"]))
+        for day, e in results.items()
+        if e["result"] == "won" and not e.get("assisted")
+    ]
+    wins.sort(key=lambda w: (w[1], w[0]))
+    return wins[:limit]

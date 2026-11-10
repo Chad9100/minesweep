@@ -36,10 +36,13 @@ from minesweep.render import (
 from minesweep.solver import FLAG, REVEAL, suggest
 from minesweep.storage import (
     StorageError,
+    daily_leaderboard,
     data_dir,
     delete_save,
+    load_daily,
     load_game,
     load_scores,
+    record_daily,
     record_score,
     save_game,
 )
@@ -114,7 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("resume", parents=[color], help="continue your saved game")
-    sub.add_parser("scores", help="show best times per difficulty")
+    scores = sub.add_parser("scores", help="show best times per difficulty")
+    scores.add_argument(
+        "--daily", action="store_true",
+        help="show your daily challenge results instead (first attempt per day)",
+    )
     return parser
 
 
@@ -148,6 +155,8 @@ def main(
             return _cmd_daily(args, ctx)
         if args.command == "resume":
             return _cmd_resume(args, ctx)
+        if args.daily:
+            return _cmd_daily_scores(ctx)
         return _cmd_scores(ctx)
     except KeyboardInterrupt:
         stdout.write("\nInterrupted; game not saved.\n")
@@ -245,6 +254,43 @@ def _cmd_scores(ctx: _Context) -> int:
             seed = f"  seed {e['seed']}" if e.get("seed") is not None else ""
             out.write(f"  {i:>2}. {format_seconds(e['seconds']):>8}  {e.get('date', '?')}{seed}\n")
     return 0
+
+
+def _cmd_daily_scores(ctx: _Context) -> int:
+    try:
+        results = load_daily(ctx.environ)
+    except StorageError as exc:
+        ctx.err(str(exc))
+        return 1
+    out = ctx.stdout
+    out.write("Daily challenge results (only your first attempt each day counts)\n")
+    for name, cfg in DIFFICULTIES.items():
+        days = results.get(name, {})
+        out.write(f"\n{name} ({cfg.width}x{cfg.height}, {cfg.mines} mines)\n")
+        if not days:
+            out.write("  not played yet\n")
+            continue
+        won = sum(1 for e in days.values() if e["result"] == "won")
+        out.write(f"  played {len(days)}, won {won}\n")
+        ranking = daily_leaderboard(days)
+        if not ranking:
+            out.write("  no ranked wins yet (wins with undo or a hint are not ranked)\n")
+        for i, (day, secs) in enumerate(ranking, 1):
+            out.write(f"  {i:>2}. {format_seconds(secs):>8}  {day}\n")
+        latest = max(days)
+        out.write(f"  latest: {share_line(name, latest, days[latest])}\n")
+    return 0
+
+
+def share_line(difficulty: str, day: str, entry: Mapping) -> str:
+    """A one-line, spoiler-free daily result to paste to friends."""
+    head = f"minesweep daily {day} {difficulty}: "
+    secs = format_seconds(entry["seconds"])
+    if entry["result"] == "won":
+        return head + f"cleared in {secs}" + (" (assisted)" if entry.get("assisted") else "")
+    cleared, safe = entry.get("cleared", 0), entry.get("safe", 0)
+    pct = int(100 * cleared / safe) if safe else 0
+    return head + f"hit a mine after {secs}, {cleared}/{safe} safe cells open ({pct}%)"
 
 
 # ------------------------------------------------------------------ game loop
@@ -377,6 +423,8 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     if board.state == LOST:
         where = cell_label(board.exploded) if board.exploded else "?"
         out.write(f"BOOM! You hit a mine at {where}. Game over after {format_seconds(secs)}.\n")
+        if board.daily:
+            _finish_daily(board, ctx)
         return 0
     assert board.state == WON
     out.write(f"You win! Cleared in {format_seconds(secs)}.\n")
@@ -385,6 +433,7 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
         return 0
     if board.daily:
         out.write("Daily challenges are not entered in the regular best-times table.\n")
+        _finish_daily(board, ctx)
         return 0
     used = []
     if board.undos:
@@ -409,6 +458,37 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     else:
         out.write(f"New best time #{rank} for {board.config.difficulty}!\n")
     return 0
+
+
+def _finish_daily(board: Board, ctx: _Context) -> None:
+    """Record a finished daily challenge and print its shareable line."""
+    out = ctx.stdout
+    name, day = board.config.difficulty, board.daily
+    assert day is not None
+    won = board.state == WON
+    assisted = bool(board.undos or board.hints)
+    try:
+        stored = record_daily(
+            name, day, won=won, seconds=board.elapsed, assisted=assisted,
+            cleared=len(board.revealed - board.mines),
+            safe=board.config.cells - board.config.mines, environ=ctx.environ,
+        )
+        days = load_daily(ctx.environ)[name]
+    except (StorageError, OSError) as exc:
+        ctx.err(f"could not record your daily result: {exc}")
+        return
+    entry = days[day]
+    if not stored:
+        out.write(
+            f"You already finished the {day} {name} daily; only your first result counts.\n"
+        )
+    elif won and assisted:
+        out.write("You used undo or a hint, so this daily win is recorded but not ranked.\n")
+    elif won:
+        ranking = [d for d, _ in daily_leaderboard(days)]
+        if day in ranking:
+            out.write(f"Daily best #{ranking.index(day) + 1} for {name}!\n")
+    out.write(f"Share: {share_line(name, day, entry)}\n")
 
 
 def _hint_text(board: Board, seen: set) -> str:
