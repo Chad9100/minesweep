@@ -69,7 +69,9 @@ and mouse clicks") is split into the three steps below.
       (arrow-key cursor, space/Enter reveals or chords, `f`/`c`/`u`/`h`/`s`/`q`;
       the key handling is a plain `Session` class tested without a terminal;
       results, saves, scores and stats are shared with the turn-based mode)
-- [ ] Mouse clicks in `--tui`: left click reveals, right click flags (1.5 h)
+- [x] Mouse clicks in `--tui`: left click reveals, right click flags (1.5 h)
+      (`Session.cell_at` maps a screen position to a cell and is tested against
+      the drawn layout; curses only supplies the click coordinates)
 - [ ] Coloured numbers and flags in `--tui` (curses colour pairs, honouring
       `--color` and `NO_COLOR`) (1 h)
 - [x] Keep the turn-based mode as the default and dependency-free (1 h)
@@ -85,4 +87,4 @@ and mouse clicks") is split into the three steps below.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 8.5 hours.**
+**Total remaining: about 7 hours.**

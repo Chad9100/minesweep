@@ -276,3 +276,69 @@ def test_tui_without_curses_explains_how_to_get_it(monkeypatch):
     )
     assert code == 2
     assert 'pip install "minesweep-cli[tui]"' in err.getvalue()
+
+
+# ------------------------------------------------------------------ mouse
+
+
+def test_cell_at_matches_the_drawn_layout():
+    board = Board.from_layout(["*" + "." * 11] + ["." * 12] * 11, clock=lambda: 0.0)
+    s = Session(board)
+    lines = s.screen_lines(ASCII_GLYPHS)
+    # Row 3 is board row 1; "10" is a two-wide row label, columns are single letters.
+    assert lines[2].lstrip().startswith("A")
+    for x in range(12):
+        col = lines[2].index(chr(ord("A") + x))
+        assert s.cell_at(col, 3 + 4) == (x, 4)
+    assert s.cell_at(0, 3) is None  # the row number
+    assert s.cell_at(4, 3) is None  # the gap between columns A and B
+    assert s.cell_at(lines[2].index("A"), 2) is None  # header row
+    assert s.cell_at(lines[2].index("A"), 3 + 12) is None  # below the board
+    assert s.cell_at(200, 3) is None
+
+
+def test_left_click_reveals_and_chords_right_click_flags():
+    board = Board.from_layout(["*..", "...", "..*"], clock=lambda: 0.0)
+    s = Session(board)
+    lines = s.screen_lines(ASCII_GLYPHS)
+    col = lambda x: lines[2].index(chr(ord("A") + x))  # noqa: E731
+    s.click(col(1), 4, "left")  # B2
+    assert board.revealed == {(1, 1)} and s.cursor == (1, 1)
+    s.click(col(0), 3, "right")  # A1
+    s.click(col(2), 5, "right")  # C3
+    assert board.flagged == {(0, 0), (2, 2)}
+    s.click(col(1), 4, "left")  # chord on B2
+    assert board.state == WON
+
+
+def test_click_outside_the_board_or_after_the_game_does_nothing():
+    board = corner_board()
+    s = Session(board)
+    s.click(0, 0)
+    assert not board.revealed and s.cursor == (1, 1)
+    s.handle("q")
+    s.click(2, 3)
+    assert not board.revealed
+
+
+def test_mouse_events_drive_the_loop():
+    screen = FakeScreen(keys("idle"))
+    cur = fake_curses(screen)
+    cur.KEY_MOUSE, cur.BUTTON1_CLICKED, cur.BUTTON3_CLICKED = 409, 4, 4096
+    cur.BUTTON1_PRESSED = cur.BUTTON3_PRESSED = 0
+    events = [(0, 4, 5, 0, 4), (0, 4, 5, 0, 4096), (0, 4, 5, 0, 0)]
+    cur.getmouse = lambda: events.pop(0)
+    masks = []
+    cur.mousemask = masks.append
+    from minesweep.tui import _loop, mouse_button
+
+    assert mouse_button(4, cur) == "left" and mouse_button(4096, cur) == "right"
+    assert mouse_button(0, cur) is None
+    board = Board.from_layout(["*..", "..*", "..."], clock=lambda: 0.0)
+    s = Session(board)
+    screen.keys = [409, 409, 409, ord("q")]
+    _loop(screen, s, ASCII_GLYPHS, cur)
+    assert masks == [4 | 4096]
+    assert board.revealed == {(1, 2)}  # left click on B3 (col 4, row 5)
+    assert board.flagged == set()  # the right click on a revealed cell is refused
+    assert s.outcome == QUIT

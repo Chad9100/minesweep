@@ -18,13 +18,14 @@ from minesweep.board import (
     CoordError,
     MoveError,
     cell_label,
+    column_label,
     daily_start,
 )
 from minesweep.render import pick_glyphs, render_board, render_status
 from minesweep.solver import FLAG, REVEAL, suggest
 
 KEYS_HELP = (
-    "arrows move   space/enter reveal (chord on a number)   f flag   "
+    "arrows/click move+reveal   space/enter reveal (chord on a number)   f flag (right click)   "
     "u undo   h hint   s save+quit   q quit"
 )
 INSTALL_HINT = 'on Windows, install it with: pip install "minesweep-cli[tui]"'
@@ -32,6 +33,7 @@ INSTALL_HINT = 'on Windows, install it with: pip install "minesweep-cli[tui]"'
 STEPS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 
 SAVE, QUIT = "save", "quit"
+BOARD_TOP = 3  # title, blank line and the column letters come first
 
 
 class Session:
@@ -92,6 +94,40 @@ class Session:
             self.outcome = QUIT
         elif key == "?":
             self.message = KEYS_HELP
+
+    def cell_at(self, col: int, row: int) -> Cell | None:
+        """The board cell drawn at screen column ``col``, row ``row``, or None.
+
+        Mirrors the layout of :meth:`screen_lines`: a title and a blank line,
+        then the column letters, then one line per board row that starts with
+        the row number and a space.
+        """
+        board = self.board
+        cell_w = len(column_label(board.width - 1))
+        row_w = len(str(board.height))
+        y = row - BOARD_TOP
+        offset = col - (row_w + 1)
+        if not 0 <= y < board.height or offset < 0:
+            return None
+        x, within = divmod(offset, cell_w + 1)
+        if x >= board.width:
+            return None
+        if within >= cell_w:  # the space between two cells
+            return None
+        return (x, y)
+
+    def click(self, col: int, row: int, button: str = "left") -> None:
+        """Mouse click: left reveals (or chords on a number), right flags."""
+        if self.done:
+            return
+        cell = self.cell_at(col, row)
+        if cell is None:
+            return
+        self.cursor = cell
+        if button == "right":
+            self.handle("f")
+        else:
+            self.handle(" ")
 
     def _move(self, action: str) -> None:
         board, cell = self.board, self.cursor
@@ -177,6 +213,29 @@ def key_name(code: int, curses: Any) -> str | None:
     return None
 
 
+def mouse_button(state: int, curses: Any) -> str | None:
+    """"left" or "right" for a click in the curses button state, else None."""
+    if state & getattr(curses, "BUTTON1_CLICKED", 0) or state & getattr(
+        curses, "BUTTON1_PRESSED", 0
+    ):
+        return "left"
+    if state & getattr(curses, "BUTTON3_CLICKED", 0) or state & getattr(
+        curses, "BUTTON3_PRESSED", 0
+    ):
+        return "right"
+    return None
+
+
+def _enable_mouse(curses: Any) -> None:
+    mask = getattr(curses, "BUTTON1_PRESSED", 0) | getattr(curses, "BUTTON3_PRESSED", 0)
+    mask |= getattr(curses, "BUTTON1_CLICKED", 0) | getattr(curses, "BUTTON3_CLICKED", 0)
+    if mask and hasattr(curses, "mousemask"):
+        try:
+            curses.mousemask(mask)
+        except curses.error:
+            pass
+
+
 def _draw(screen: Any, session: Session, glyphs, curses: Any) -> None:
     screen.erase()
     rows, cols = screen.getmaxyx()
@@ -197,11 +256,21 @@ def _loop(screen: Any, session: Session, glyphs, curses: Any) -> None:
     except curses.error:  # some terminals cannot hide the cursor
         pass
     screen.keypad(True)
+    _enable_mouse(curses)
     screen.timeout(1000)  # wake up every second so the clock keeps moving
     while not session.done:
         _draw(screen, session, glyphs, curses)
         code = screen.getch()
         if code == -1:
+            continue
+        if code == getattr(curses, "KEY_MOUSE", None):
+            try:
+                _id, col, row, _z, state = curses.getmouse()
+            except curses.error:
+                continue
+            button = mouse_button(state, curses)
+            if button:
+                session.click(col, row, button)
             continue
         name = key_name(code, curses)
         if name:

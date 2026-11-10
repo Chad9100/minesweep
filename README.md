@@ -704,6 +704,8 @@ minesweep play --tui
 | `s` | Save and quit (`minesweep resume --tui` continues). |
 | `q` or Esc | Quit without saving. |
 | `?` | Show the keys. |
+| left click | Move the cursor to the cell and reveal it (chord on a revealed number). |
+| right click | Move the cursor to the cell and flag or unflag it. |
 
 The screen after revealing E5 on `--seed 1` and flagging G2 (rendered by
 `minesweep.tui.Session`, the same code that feeds curses):
@@ -732,7 +734,7 @@ board is printed with the same result lines as the turn-based mode, so wins
 are ranked and counted in `minesweep stats` the same way. Saves are shared:
 a game saved in one mode resumes in the other. `--tui` needs a real terminal
 and exits with code 2 when input or output is redirected, or when curses is
-missing (with the install command above). Mouse clicks are not supported yet.
+missing (with the install command above). Mouse clicks need a terminal that reports them; the keyboard always works.
 
 ### Solver
 
