@@ -241,7 +241,7 @@ def _cmd_play(args: argparse.Namespace, ctx: _Context) -> int:
 def _play(board: Board, args: argparse.Namespace, ctx: _Context, *, from_save: bool) -> int:
     """Run the game full screen with --tui, or with typed commands otherwise."""
     if args.tui:
-        return run_tui(board, ctx, from_save=from_save)
+        return run_tui(board, ctx, from_save=from_save, color_mode=args.color)
     return run_game(board, ctx, color_mode=args.color, from_save=from_save, echo=args.echo)
 
 

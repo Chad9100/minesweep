@@ -342,3 +342,103 @@ def test_mouse_events_drive_the_loop():
     assert board.revealed == {(1, 2)}  # left click on B3 (col 4, row 5)
     assert board.flagged == set()  # the right click on a revealed cell is refused
     assert s.outcome == QUIT
+
+
+# ---------------------------------------------------------------- colour
+
+
+def colour_curses(screen, colors=True):
+    cur = fake_curses(screen)
+    cur.COLOR_BLUE, cur.COLOR_GREEN, cur.COLOR_RED, cur.COLOR_CYAN = 4, 2, 1, 6
+    cur.COLOR_MAGENTA, cur.COLOR_WHITE, cur.COLOR_BLACK = 5, 7, 0
+    cur.A_BOLD, cur.A_DIM = 1 << 20, 1 << 21
+    cur.pairs = {}
+    cur.has_colors = lambda: colors
+    cur.start_color = lambda: None
+    cur.use_default_colors = lambda: None
+    cur.init_pair = lambda i, fg, bg: cur.pairs.__setitem__(i, (fg, bg))
+    cur.color_pair = lambda i: i << 8
+    return cur
+
+
+class ColourScreen(FakeScreen):
+    def __init__(self, keys, size=(24, 80)):
+        super().__init__(keys, size)
+        self.styled = []
+
+    def addstr(self, y, x, text, attr=None):
+        if attr is None:
+            self._lines[y] = text
+        else:
+            self.styled.append((y, x, text, attr))
+
+
+def test_cell_styles_line_up_with_the_drawn_cells():
+    board = Board.from_layout(["*..", "...", "..."], clock=lambda: 0.0)
+    s = Session(board)
+    s.cursor = (2, 2)
+    s.handle("f")  # flag C3
+    board.reveal((1, 0))  # B1 touches the mine: a 1
+    lines = s.screen_lines(ASCII_GLYPHS)
+    drawn = {(row, col): (lines[row][col], style) for row, col, _w, style in s.cell_styles(ASCII_GLYPHS)}
+    one = (3, 4)  # row 1 is screen row 3; B is the second cell, two columns in
+    assert drawn[one] == ("1", "n1")
+    assert drawn[(5, 6)] == ("F", "flag")
+    assert drawn[(3, 2)] == (".", "hidden")
+    assert all(s.cell_at(col, row) is not None for row, col, _w, _s in s.cell_styles(ASCII_GLYPHS))
+
+
+def test_cell_styles_skip_blank_cells_and_show_mines_when_over():
+    board = Board.from_layout(["*..", "...", "..."], clock=lambda: 0.0)
+    s = Session(board)
+    s.cursor = (2, 2)
+    s.handle(" ")  # opens everything except the mine: a win
+    assert board.state == WON
+    styles = {style for *_pos, style in s.cell_styles(ASCII_GLYPHS)}
+    assert styles == {"n1", "flag"}  # winning flags the last mine
+    assert len(s.cell_styles(ASCII_GLYPHS)) == 4  # three 1s and the flag; blanks have none
+
+
+def test_every_number_has_a_style():
+    from minesweep.render import NUMBER_COLORS
+    from minesweep.tui import STYLE_SPEC
+
+    assert {f"n{n}" for n in NUMBER_COLORS} <= set(STYLE_SPEC)
+
+
+def test_setup_colors_makes_a_pair_per_style_and_handles_no_colour():
+    from minesweep.tui import STYLE_SPEC, setup_colors
+
+    cur = colour_curses(ColourScreen([]))
+    attrs = setup_colors(cur)
+    assert set(attrs) == set(STYLE_SPEC)
+    assert cur.pairs[1] == (cur.COLOR_BLUE, -1)  # n1: blue on the default background
+    assert attrs["n1"] & cur.A_BOLD and not attrs["n2"] & cur.A_BOLD
+    assert cur.pairs[list(STYLE_SPEC).index("exploded") + 1][1] == cur.COLOR_RED
+    assert setup_colors(colour_curses(ColourScreen([]), colors=False)) == {}
+    assert setup_colors(fake_curses(ColourScreen([]))) == {}  # no colour functions at all
+
+
+def run_coloured(monkeypatch, environ_extra, color_mode):
+    screen = ColourScreen(keys("down", "enter"))
+    cur = colour_curses(screen)
+    monkeypatch.setitem(sys.modules, "curses", cur)
+    ctx, _out, _err = context()
+    ctx.environ.pop("NO_COLOR", None)
+    ctx.environ.update(environ_extra)
+    run_tui(corner_board(), ctx, from_save=False, color_mode=color_mode)
+    return screen, cur
+
+
+def test_run_tui_draws_coloured_cells(monkeypatch):
+    screen, cur = run_coloured(monkeypatch, {}, "always")
+    assert cur.pairs
+    assert screen.styled
+    assert all(len(text) == 1 for _y, _x, text, _a in screen.styled)
+
+
+def test_run_tui_color_never_and_no_color_draw_plain(monkeypatch):
+    screen, cur = run_coloured(monkeypatch, {}, "never")
+    assert not cur.pairs and not screen.styled
+    screen, cur = run_coloured(monkeypatch, {"NO_COLOR": "1"}, "auto")
+    assert not cur.pairs and not screen.styled

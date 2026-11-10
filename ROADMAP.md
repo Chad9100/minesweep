@@ -72,8 +72,10 @@ and mouse clicks") is split into the three steps below.
 - [x] Mouse clicks in `--tui`: left click reveals, right click flags (1.5 h)
       (`Session.cell_at` maps a screen position to a cell and is tested against
       the drawn layout; curses only supplies the click coordinates)
-- [ ] Coloured numbers and flags in `--tui` (curses colour pairs, honouring
+- [x] Coloured numbers and flags in `--tui` (curses colour pairs, honouring
       `--color` and `NO_COLOR`) (1 h)
+      (`Session.cell_styles` gives each cell's screen position and style, tested
+      against the drawn text; curses only turns styles into colour pairs)
 - [x] Keep the turn-based mode as the default and dependency-free (1 h)
       (`--tui` is opt-in; curses is imported only when it is used)
 
@@ -87,4 +89,4 @@ and mouse clicks") is split into the three steps below.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 7 hours.**
+**Total remaining: about 6 hours.**

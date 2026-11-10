@@ -736,6 +736,11 @@ a game saved in one mode resumes in the other. `--tui` needs a real terminal
 and exits with code 2 when input or output is redirected, or when curses is
 missing (with the install command above). Mouse clicks need a terminal that reports them; the keyboard always works.
 
+Numbers, flags, mines and hidden cells are coloured with the same palette as
+the turn-based mode, on terminals that support colour. `--color never` or the
+`NO_COLOR` environment variable turns it off (`--color always` forces it on);
+the default `auto` colours only when `NO_COLOR` is unset.
+
 ### Solver
 
 `minesweep.solver.analyze(board)` works out which hidden cells the visible

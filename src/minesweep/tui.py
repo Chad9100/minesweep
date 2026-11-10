@@ -21,8 +21,41 @@ from minesweep.board import (
     column_label,
     daily_start,
 )
-from minesweep.render import pick_glyphs, render_board, render_status
+from minesweep.render import (
+    EXPLODED_COLOR,
+    FLAG_COLOR,
+    HIDDEN_COLOR,
+    MINE_COLOR,
+    NUMBER_COLORS,
+    _cell,
+    pick_glyphs,
+    render_board,
+    render_status,
+    use_color,
+)
 from minesweep.solver import FLAG, REVEAL, suggest
+
+# Style name -> (curses colour name, attributes). Same palette as the
+# turn-based mode's ANSI colours; "bold" stands in for the bright variants.
+STYLE_SPEC = {
+    "n1": ("blue", ("bold",)),
+    "n2": ("green", ()),
+    "n3": ("red", ("bold",)),
+    "n4": ("blue", ()),
+    "n5": ("red", ()),
+    "n6": ("cyan", ()),
+    "n7": ("magenta", ()),
+    "n8": ("white", ("dim",)),
+    "flag": ("red", ("bold",)),
+    "mine": ("white", ("bold",)),
+    "exploded": ("white", ("bold",)),  # drawn on a red background, see EXPLODED_BG
+    "hidden": ("white", ("dim",)),
+}
+EXPLODED_BG = "red"
+_STYLE_OF_CODE = {NUMBER_COLORS[n]: f"n{n}" for n in NUMBER_COLORS}
+_STYLE_OF_CODE.update(
+    {FLAG_COLOR: "flag", MINE_COLOR: "mine", EXPLODED_COLOR: "exploded", HIDDEN_COLOR: "hidden"}
+)
 
 KEYS_HELP = (
     "arrows/click move+reveal   space/enter reveal (chord on a number)   f flag (right click)   "
@@ -185,6 +218,24 @@ class Session:
         lines += [self.message or "Press ? for keys.", KEYS_HELP]
         return lines
 
+    def cell_styles(self, glyphs) -> list[tuple[int, int, int, str]]:
+        """``(screen row, screen column, width, style)`` for every board cell.
+
+        Positions match :meth:`screen_lines` and :meth:`cell_at`; style names
+        are the keys of ``STYLE_SPEC``. Blank revealed cells have no style.
+        """
+        board = self.board
+        cell_w = len(column_label(board.width - 1))
+        row_w = len(str(board.height))
+        spans = []
+        for y in range(board.height):
+            for x in range(board.width):
+                _text, code = _cell(board, (x, y), glyphs, board.over)
+                style = _STYLE_OF_CODE.get(code)
+                if style:
+                    spans.append((BOARD_TOP + y, row_w + 1 + x * (cell_w + 1), cell_w, style))
+        return spans
+
 
 def _start_cursor(board: Board) -> Cell:
     if board.last_move:
@@ -236,30 +287,64 @@ def _enable_mouse(curses: Any) -> None:
             pass
 
 
-def _draw(screen: Any, session: Session, glyphs, curses: Any) -> None:
+def setup_colors(curses: Any) -> dict[str, int]:
+    """Create colour pairs and return ``{style: curses attribute}``; {} if unsupported."""
+    try:
+        if not curses.has_colors():
+            return {}
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+            default_bg = -1
+        except curses.error:
+            default_bg = getattr(curses, "COLOR_BLACK", 0)
+        attrs: dict[str, int] = {}
+        for i, (style, (fg, extra)) in enumerate(STYLE_SPEC.items(), start=1):
+            bg = getattr(curses, f"COLOR_{EXPLODED_BG.upper()}") if style == "exploded" else default_bg
+            curses.init_pair(i, getattr(curses, f"COLOR_{fg.upper()}"), bg)
+            attr = curses.color_pair(i)
+            for name in extra:
+                attr |= getattr(curses, f"A_{name.upper()}", 0)
+            attrs[style] = attr
+        return attrs
+    except (AttributeError, curses.error):
+        return {}
+
+
+def _draw(
+    screen: Any, session: Session, glyphs, curses: Any, attrs: dict[str, int] | None = None
+) -> None:
     screen.erase()
     rows, cols = screen.getmaxyx()
     lines = session.screen_lines(glyphs)
-    if len(lines) > rows or max(len(line) for line in lines[:-1]) >= cols:
+    fits = not (len(lines) > rows or max(len(line) for line in lines[:-1]) >= cols)
+    if not fits:
         lines = [f"Make the terminal bigger ({rows}x{cols} is too small)."]
     for y, line in enumerate(lines[:rows]):
         try:
             screen.addstr(y, 0, line[: max(cols - 1, 0)])
         except curses.error:  # writing the bottom-right cell raises; harmless
             pass
+    if attrs and fits:
+        for row, col, width, style in session.cell_styles(glyphs):
+            try:
+                screen.addstr(row, col, lines[row][col : col + width], attrs[style])
+            except curses.error:
+                pass
     screen.refresh()
 
 
-def _loop(screen: Any, session: Session, glyphs, curses: Any) -> None:
+def _loop(screen: Any, session: Session, glyphs, curses: Any, color: bool = False) -> None:
     try:
         curses.curs_set(0)
     except curses.error:  # some terminals cannot hide the cursor
         pass
+    attrs = setup_colors(curses) if color else {}
     screen.keypad(True)
     _enable_mouse(curses)
     screen.timeout(1000)  # wake up every second so the clock keeps moving
     while not session.done:
-        _draw(screen, session, glyphs, curses)
+        _draw(screen, session, glyphs, curses, attrs)
         code = screen.getch()
         if code == -1:
             continue
@@ -277,7 +362,7 @@ def _loop(screen: Any, session: Session, glyphs, curses: Any) -> None:
             session.handle(name)
 
 
-def run_tui(board: Board, ctx: Any, *, from_save: bool) -> int:
+def run_tui(board: Board, ctx: Any, *, from_save: bool, color_mode: str = "auto") -> int:
     """Play ``board`` full screen, then print the result like the line mode does."""
     from minesweep import cli  # imported here: cli imports this module
 
@@ -292,8 +377,9 @@ def run_tui(board: Board, ctx: Any, *, from_save: bool) -> int:
 
     session = Session(board)
     glyphs = pick_glyphs(ctx.stdout)
+    color = use_color(color_mode, ctx.stdout, ctx.environ)
     try:
-        curses.wrapper(lambda screen: _loop(screen, session, glyphs, curses))
+        curses.wrapper(lambda screen: _loop(screen, session, glyphs, curses, color))
     except KeyboardInterrupt:
         ctx.stdout.write("Interrupted; game not saved.\n")
         return 130
