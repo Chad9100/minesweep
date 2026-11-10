@@ -620,6 +620,28 @@ $ minesweep daily --date 2026-11-11
 minesweep: error: the daily challenge for 2026-11-11 is not out yet (today is 2026-11-10 UTC)
 ```
 
+### Statistics
+
+Every game you finish on a standard difficulty (beginner, intermediate,
+expert) is counted, win or lose, and the game ends with your running totals
+for that difficulty:
+
+```text
+BOOM! You hit a mine at A3. Game over after 0.0s.
+Stats: beginner: 1 played, 0 won (0%), win streak 0 (best 0)
+```
+
+After a few games it reads like
+`Stats: beginner: 4 played, 3 won (75%), win streak 1 (best 2), average win 41.2s`.
+
+- Unlike the best-times table, the statistics include every finished game:
+  games with undo or a hint, no-guess boards and daily challenges (replays
+  too). Custom boards are not counted.
+- Quitting or saving does not finish a game, so it does not count, and a
+  resumed game counts once, when it ends.
+- The win streak is the number of wins since your last loss; the average is
+  over winning times only.
+
 ### Solver
 
 `minesweep.solver.analyze(board)` works out which hidden cells the visible
@@ -704,7 +726,8 @@ terminal and the `NO_COLOR` environment variable is not set. Use
 | Any (override) | `$MINESWEEP_HOME` |
 
 It holds `save.json` (one saved game, including its move history for undo), `scores.json` (top 10 times per
-difficulty) and `daily.json` (your first result for each daily challenge). All are plain JSON.
+difficulty) and `daily.json` (your first result for each daily challenge) and `stats.json` (games
+played and won, streaks and total winning time per difficulty). All are plain JSON.
 
 ## Development
 
@@ -725,7 +748,8 @@ Layout:
 - `src/minesweep/solver.py` - constraint solver: which hidden cells the visible
   board proves safe or mined. Pure logic like `board.py`.
 - `src/minesweep/render.py` - turns a board into text (colour and ASCII fallback).
-- `src/minesweep/storage.py` - save file and best times in the per-user data directory.
+- `src/minesweep/storage.py` - save file, best times, daily results and statistics in the
+  per-user data directory.
 - `src/minesweep/cli.py` - argument parsing and the turn-based game loop.
 - `tests/` - pytest suite, including full scripted games through fake stdin.
   The tests always set `MINESWEEP_HOME` to a temporary directory, so they never

@@ -234,3 +234,87 @@ def daily_leaderboard(
     ]
     wins.sort(key=lambda w: (w[1], w[0]))
     return wins[:limit]
+
+
+# ------------------------------------------------------------------ statistics
+
+STATS_NAME = "stats.json"
+_STAT_KEYS = ("played", "won", "streak", "best_streak")
+
+
+def stats_path(environ: Mapping[str, str] | None = None) -> Path:
+    return data_dir(environ) / STATS_NAME
+
+
+def empty_stats() -> dict[str, Any]:
+    return {"played": 0, "won": 0, "streak": 0, "best_streak": 0, "win_seconds": 0.0}
+
+
+def _clean_stats(entry: Any) -> dict[str, Any]:
+    """A usable stats record; damaged or missing fields fall back to zero."""
+    out = empty_stats()
+    if not isinstance(entry, dict):
+        return out
+    for key in _STAT_KEYS:
+        value = entry.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            out[key] = value
+    secs = entry.get("win_seconds")
+    if isinstance(secs, (int, float)) and not isinstance(secs, bool) and secs >= 0:
+        out["win_seconds"] = float(secs)
+    out["won"] = min(out["won"], out["played"])
+    out["streak"] = min(out["streak"], out["won"])
+    out["best_streak"] = max(min(out["best_streak"], out["won"]), out["streak"])
+    return out
+
+
+def load_stats(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, Any]]:
+    """Games played and won, win streaks and total winning time per difficulty."""
+    path = stats_path(environ)
+    try:
+        data = _read_json(path)
+    except FileNotFoundError:
+        data = {}
+    if not isinstance(data, dict):
+        raise StorageError(f"{path} is not a minesweep statistics file")
+    return {name: _clean_stats(data.get(name)) for name in DIFFICULTIES}
+
+
+def record_game(
+    difficulty: str,
+    *,
+    won: bool,
+    seconds: float,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """Count one finished game. Returns the difficulty's updated record, or
+    None for a custom board (those are not tracked)."""
+    if difficulty not in DIFFICULTIES:
+        return None
+    stats = load_stats(environ)
+    entry = stats[difficulty]
+    entry["played"] += 1
+    if won:
+        entry["won"] += 1
+        entry["streak"] += 1
+        entry["best_streak"] = max(entry["best_streak"], entry["streak"])
+        entry["win_seconds"] = round(entry["win_seconds"] + float(seconds), 2)
+    else:
+        entry["streak"] = 0
+    _write_json(stats_path(environ), stats)
+    return entry
+
+
+def stats_summary(difficulty: str, entry: Mapping[str, Any]) -> str:
+    """One line such as ``beginner: 4 played, 3 won (75%), win streak 2 (best 3), average win 41.2s``."""
+    played, won = entry["played"], entry["won"]
+    if not played:
+        return f"{difficulty}: no games finished yet"
+    pct = int(100 * won / played)
+    line = (
+        f"{difficulty}: {played} played, {won} won ({pct}%), "
+        f"win streak {entry['streak']} (best {entry['best_streak']})"
+    )
+    if won:
+        line += f", average win {entry['win_seconds'] / won:.1f}s"
+    return line

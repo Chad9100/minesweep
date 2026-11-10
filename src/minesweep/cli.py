@@ -43,8 +43,10 @@ from minesweep.storage import (
     load_game,
     load_scores,
     record_daily,
+    record_game,
     record_score,
     save_game,
+    stats_summary,
 )
 
 HELP_TEXT = """\
@@ -416,9 +418,29 @@ def run_game(
 
 
 def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
-    out = ctx.stdout
     if from_save:
         delete_save(ctx.environ)
+    code = _report_result(board, ctx)
+    _record_stats(board, ctx)
+    return code
+
+
+def _record_stats(board: Board, ctx: _Context) -> None:
+    """Count a finished game on a standard board and print the running totals."""
+    if not board.config.ranked:
+        return
+    name = board.config.difficulty
+    try:
+        entry = record_game(name, won=board.state == WON, seconds=board.elapsed, environ=ctx.environ)
+    except (StorageError, OSError) as exc:
+        ctx.err(f"could not update your statistics: {exc}")
+        return
+    if entry is not None:
+        ctx.stdout.write(f"Stats: {stats_summary(name, entry)}\n")
+
+
+def _report_result(board: Board, ctx: _Context) -> int:
+    out = ctx.stdout
     secs = board.elapsed
     if board.state == LOST:
         where = cell_label(board.exploded) if board.exploded else "?"
