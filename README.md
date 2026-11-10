@@ -41,6 +41,8 @@ minesweep resume                            # continue a saved game
 minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
 minesweep scores --daily                    # your daily challenge results
+minesweep stats                             # games played, win rate, streaks
+minesweep scores --reset                    # start the best times over (asks first)
 ```
 
 Columns are letters (`A`, `B`, ... `Z`, `AA`, ...), rows are numbers starting at 1.
@@ -641,6 +643,42 @@ After a few games it reads like
   resumed game counts once, when it ends.
 - The win streak is the number of wins since your last loss; the average is
   over winning times only.
+
+`minesweep stats` shows the totals for every difficulty at once:
+
+```text
+$ minesweep stats
+Statistics (every finished game on a standard board; custom boards are not counted)
+
+  beginner: 4 played, 3 won (75%), win streak 1 (best 2), average win 41.2s
+  intermediate: 1 played, 0 won (0%), win streak 0 (best 0)
+  expert: no games finished yet
+
+  all: 5 played, 3 won (60%)
+```
+
+### Starting over
+
+Each kind of record can be wiped on its own; the others, and your saved game,
+are kept:
+
+```sh
+minesweep scores --reset            # best times (scores.json)
+minesweep scores --daily --reset    # daily challenge results (daily.json)
+minesweep stats --reset             # statistics (stats.json)
+```
+
+It asks first and only deletes on `y` or `yes`; anything else, including the
+end of piped input, keeps the file and exits with code 1. Add `--yes` (`-y`)
+to skip the question in scripts:
+
+```text
+$ minesweep scores --reset
+Delete your best times? This cannot be undone. [y/N] n
+Nothing deleted.
+$ minesweep stats --reset --yes
+Deleted your statistics.
+```
 
 ### Solver
 

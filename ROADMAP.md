@@ -53,7 +53,10 @@ Estimates are rough working hours for one person, including tests and docs.
 - [x] Games played/won, win rate, streaks and average time per difficulty (2 h)
       (`stats.json`; every finished game on a standard board counts, including
       assisted, no-guess and daily games; a `Stats:` line ends each such game)
-- [ ] `minesweep stats` view and `minesweep scores --reset` (1 h)
+- [x] `minesweep stats` view and `minesweep scores --reset` (1 h)
+      (one summary line per difficulty plus an overall total; `--reset` on
+      `scores`, `scores --daily` and `stats` deletes just that file after a
+      `[y/N]` question, or straight away with `--yes`)
 
 ## v0.6 - full-screen UI as an optional extra (~6 h)
 
@@ -71,4 +74,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 13 hours.**
+**Total remaining: about 12 hours.**

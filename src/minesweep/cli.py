@@ -42,9 +42,13 @@ from minesweep.storage import (
     load_daily,
     load_game,
     load_scores,
+    load_stats,
     record_daily,
     record_game,
     record_score,
+    reset_daily,
+    reset_scores,
+    reset_stats,
     save_game,
     stats_summary,
 )
@@ -124,7 +128,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--daily", action="store_true",
         help="show your daily challenge results instead (first attempt per day)",
     )
+    _add_reset_args(scores, "the records shown (best times, or daily results with --daily)")
+    stats = sub.add_parser(
+        "stats",
+        help="show games played, wins, streaks and average win time",
+        description="Show games played and won, win rate, win streaks and average "
+        "winning time per difficulty.",
+    )
+    _add_reset_args(stats, "your statistics")
     return parser
+
+
+def _add_reset_args(parser: argparse.ArgumentParser, what: str) -> None:
+    parser.add_argument(
+        "--reset", action="store_true",
+        help=f"delete {what}; asks first, and other records are kept",
+    )
+    parser.add_argument(
+        "--yes", "-y", action="store_true",
+        help="with --reset: do not ask for confirmation",
+    )
 
 
 def main(
@@ -157,8 +180,16 @@ def main(
             return _cmd_daily(args, ctx)
         if args.command == "resume":
             return _cmd_resume(args, ctx)
+        if args.command == "stats":
+            if args.reset:
+                return _cmd_reset(ctx, "your statistics", reset_stats, args.yes)
+            return _cmd_stats(ctx)
         if args.daily:
+            if args.reset:
+                return _cmd_reset(ctx, "your daily challenge results", reset_daily, args.yes)
             return _cmd_daily_scores(ctx)
+        if args.reset:
+            return _cmd_reset(ctx, "your best times", reset_scores, args.yes)
         return _cmd_scores(ctx)
     except KeyboardInterrupt:
         stdout.write("\nInterrupted; game not saved.\n")
@@ -281,6 +312,51 @@ def _cmd_daily_scores(ctx: _Context) -> int:
             out.write(f"  {i:>2}. {format_seconds(secs):>8}  {day}\n")
         latest = max(days)
         out.write(f"  latest: {share_line(name, latest, days[latest])}\n")
+    return 0
+
+
+def _cmd_stats(ctx: _Context) -> int:
+    try:
+        stats = load_stats(ctx.environ)
+    except StorageError as exc:
+        ctx.err(str(exc))
+        return 1
+    out = ctx.stdout
+    out.write("Statistics (every finished game on a standard board; custom boards are not counted)\n\n")
+    for name in DIFFICULTIES:
+        out.write(f"  {stats_summary(name, stats[name])}\n")
+    total = {
+        "played": sum(e["played"] for e in stats.values()),
+        "won": sum(e["won"] for e in stats.values()),
+    }
+    if total["played"]:
+        pct = int(100 * total["won"] / total["played"])
+        out.write(f"\n  all: {total['played']} played, {total['won']} won ({pct}%)\n")
+    return 0
+
+
+def _cmd_reset(ctx: _Context, what: str, reset: Callable[..., bool], yes: bool) -> int:
+    """Delete one kind of record after a confirmation (skipped with --yes)."""
+    if not yes:
+        ctx.stdout.write(f"Delete {what}? This cannot be undone. [y/N] ")
+        ctx.stdout.flush()
+        line = ctx.stdin.readline()
+        if not line:  # end of input: finish the prompt line
+            ctx.stdout.write("\n")
+        elif not _isatty(ctx.stdin):  # piped answer: echo it, as the game does
+            ctx.stdout.write(strip_bom(line).strip() + "\n")
+        if strip_bom(line).strip().lower() not in ("y", "yes"):
+            ctx.stdout.write("Nothing deleted.\n")
+            return 1
+    try:
+        removed = reset(ctx.environ)
+    except StorageError as exc:
+        ctx.err(str(exc))
+        return 1
+    if removed:
+        ctx.stdout.write(f"Deleted {what}.\n")
+    else:
+        ctx.stdout.write(f"Nothing to delete: {what} were never saved.\n")
     return 0
 
 

@@ -318,3 +318,31 @@ def stats_summary(difficulty: str, entry: Mapping[str, Any]) -> str:
     if won:
         line += f", average win {entry['win_seconds'] / won:.1f}s"
     return line
+
+
+# ----------------------------------------------------------------------- reset
+
+
+def _remove(path: Path) -> bool:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise StorageError(f"cannot delete {path}: {exc}") from exc
+    return True
+
+
+def reset_scores(environ: Mapping[str, str] | None = None) -> bool:
+    """Delete the best-times table. Returns False if there was none."""
+    return _remove(scores_path(environ))
+
+
+def reset_daily(environ: Mapping[str, str] | None = None) -> bool:
+    """Delete the daily challenge results. Returns False if there were none."""
+    return _remove(daily_path(environ))
+
+
+def reset_stats(environ: Mapping[str, str] | None = None) -> bool:
+    """Delete the per-difficulty statistics. Returns False if there were none."""
+    return _remove(stats_path(environ))
