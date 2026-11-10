@@ -52,6 +52,7 @@ from minesweep.storage import (
     save_game,
     stats_summary,
 )
+from minesweep.tui import run_tui
 
 HELP_TEXT = """\
 Commands:
@@ -90,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-echo", dest="echo", action="store_false",
         help="do not repeat piped commands after the prompt (they are echoed by default "
         "when input is not a terminal, so transcripts read like a typed session)",
+    )
+    color.add_argument(
+        "--tui", action="store_true",
+        help="play full screen with the arrow keys (needs curses; on Windows: "
+        'pip install "minesweep-cli[tui]")',
     )
 
     play = sub.add_parser("play", parents=[color], help="start a new game")
@@ -229,7 +235,14 @@ def _cmd_play(args: argparse.Namespace, ctx: _Context) -> int:
         return 2
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(1, 1_000_000)
     board = Board(config, seed, ctx.clock, no_guess=args.no_guess)
-    return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
+    return _play(board, args, ctx, from_save=False)
+
+
+def _play(board: Board, args: argparse.Namespace, ctx: _Context, *, from_save: bool) -> int:
+    """Run the game full screen with --tui, or with typed commands otherwise."""
+    if args.tui:
+        return run_tui(board, ctx, from_save=from_save)
+    return run_game(board, ctx, color_mode=args.color, from_save=from_save, echo=args.echo)
 
 
 def _iso_date(text: str) -> date:
@@ -250,7 +263,7 @@ def _cmd_daily(args: argparse.Namespace, ctx: _Context) -> int:
         )
         return 2
     board = Board.daily_challenge(DIFFICULTIES[args.difficulty], day, ctx.clock)
-    return run_game(board, ctx, color_mode=args.color, from_save=False, echo=args.echo)
+    return _play(board, args, ctx, from_save=False)
 
 
 def _cmd_resume(args: argparse.Namespace, ctx: _Context) -> int:
@@ -266,7 +279,7 @@ def _cmd_resume(args: argparse.Namespace, ctx: _Context) -> int:
         delete_save(ctx.environ)
         ctx.err("the saved game was already finished; start a new one with: minesweep play")
         return 1
-    return run_game(board, ctx, color_mode=args.color, from_save=True, echo=args.echo)
+    return _play(board, args, ctx, from_save=True)
 
 
 def _cmd_scores(ctx: _Context) -> int:

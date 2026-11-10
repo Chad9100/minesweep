@@ -60,9 +60,20 @@ Estimates are rough working hours for one person, including tests and docs.
 
 ## v0.6 - full-screen UI as an optional extra (~6 h)
 
-- [ ] `pip install minesweep-cli[tui]` adds a Textual (or curses where available)
-      full-screen mode with arrow keys and mouse clicks (5 h)
-- [ ] Keep the turn-based mode as the default and dependency-free (1 h)
+The original 5 h item ("a Textual or curses full-screen mode with arrow keys
+and mouse clicks") is split into the three steps below.
+
+- [x] `--tui` on `play`, `daily` and `resume`: curses full-screen mode driven
+      by the keyboard; `pip install minesweep-cli[tui]` adds windows-curses on
+      Windows (1.5 h)
+      (arrow-key cursor, space/Enter reveals or chords, `f`/`c`/`u`/`h`/`s`/`q`;
+      the key handling is a plain `Session` class tested without a terminal;
+      results, saves, scores and stats are shared with the turn-based mode)
+- [ ] Mouse clicks in `--tui`: left click reveals, right click flags (1.5 h)
+- [ ] Coloured numbers and flags in `--tui` (curses colour pairs, honouring
+      `--color` and `NO_COLOR`) (1 h)
+- [x] Keep the turn-based mode as the default and dependency-free (1 h)
+      (`--tui` is opt-in; curses is imported only when it is used)
 
 ## v0.7 - hex boards (~4 h)
 
@@ -74,4 +85,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 12 hours.**
+**Total remaining: about 8.5 hours.**

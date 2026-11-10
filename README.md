@@ -10,9 +10,10 @@ going until you clear every safe cell or hit a mine.
 - **Who it is for:** anyone who wants a quick game in a terminal window, over
   SSH, or on a machine where you can't install a GUI; and people who like
   reading a small, well-tested Python codebase.
-- **Built with:** Python 3.10+ and the standard library only. No curses, so it
-  works the same in Windows Terminal, PowerShell, cmd.exe, macOS and Linux.
-  Tests use pytest.
+- **Built with:** Python 3.10+ and the standard library only. The default
+  turn-based mode needs no curses, so it works the same in Windows Terminal,
+  PowerShell, cmd.exe, macOS and Linux; an optional full-screen mode
+  (`--tui`) uses curses. Tests use pytest.
 
 ## Install
 
@@ -38,6 +39,7 @@ minesweep play --seed 1                     # same seed + same first click = sam
 minesweep play --no-guess                   # a board you can clear by logic alone
 minesweep daily                             # today's daily challenge, same board for everyone
 minesweep resume                            # continue a saved game
+minesweep play --tui                        # full screen with the arrow keys (see below)
 minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped commands
 minesweep scores                            # best times per difficulty
 minesweep scores --daily                    # your daily challenge results
@@ -679,6 +681,58 @@ Nothing deleted.
 $ minesweep stats --reset --yes
 Deleted your statistics.
 ```
+
+### Full-screen mode
+
+Add `--tui` to `play`, `daily` or `resume` to play full screen: move a cursor
+with the arrow keys instead of typing coordinates. It uses curses, which comes
+with Python on Linux and macOS; on Windows install the extra first:
+
+```sh
+pip install -e ".[tui]"     # adds windows-curses on Windows, nothing elsewhere
+minesweep play --tui
+```
+
+| Key | What it does |
+| --- | --- |
+| arrow keys | Move the cursor (shown in square brackets). |
+| space, Enter or `r` | Reveal the cell; on a revealed number, chord. |
+| `f` | Flag or unflag the cell. |
+| `c` | Chord on the cell. |
+| `u` | Undo; the cursor jumps to the cell that was undone. |
+| `h` | Hint: the cursor jumps to a cell the board proves (not ranked). |
+| `s` | Save and quit (`minesweep resume --tui` continues). |
+| `q` or Esc | Quit without saving. |
+| `?` | Show the keys. |
+
+The screen after revealing E5 on `--seed 1` and flagging G2 (rendered by
+`minesweep.tui.Session`, the same code that feeds curses):
+
+```text
+minesweep  beginner 9x9, 10 mines
+
+  A B C D E F G H I
+1           2 . . .
+2           2[F]. .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+
+Mines left: 9   Time: 0s   Cursor: G2
+Press ? for keys.
+arrows move   space/enter reveal (chord on a number)   f flag   u undo   h hint   s save+quit   q quit
+```
+
+When the game ends, or you save or quit, the screen is restored and the final
+board is printed with the same result lines as the turn-based mode, so wins
+are ranked and counted in `minesweep stats` the same way. Saves are shared:
+a game saved in one mode resumes in the other. `--tui` needs a real terminal
+and exits with code 2 when input or output is redirected, or when curses is
+missing (with the install command above). Mouse clicks are not supported yet.
 
 ### Solver
 
