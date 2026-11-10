@@ -31,6 +31,7 @@ from minesweep.render import (
     render_status,
     use_color,
 )
+from minesweep.solver import FLAG, REVEAL, suggest
 from minesweep.storage import (
     StorageError,
     data_dir,
@@ -47,6 +48,7 @@ Commands:
   f B3    flag or unflag a hidden cell
   c B3    chord: on a number whose mines are all flagged, reveal its other neighbours
   u       undo your last move (a game where you undo is not ranked)
+  h       hint: show one move the board proves (a hinted game is not ranked)
   s       save the game and quit (continue later with: minesweep resume)
   q       quit without saving
   ?       show this help
@@ -229,6 +231,7 @@ def run_game(
         f"seed {board.seed}. Type ? for help.\n"
     )
     echo = echo and not _isatty(ctx.stdin)
+    hints_seen: set = set()  # (position, hint) pairs already counted this session
     redraw = True
     while True:
         if redraw:
@@ -253,7 +256,7 @@ def run_game(
             continue
         cmd = words[0].lower()
 
-        if cmd in ("?", "h", "help"):
+        if cmd in ("?", "help"):
             out.write(HELP_TEXT + "\n")
             continue
         if cmd in ("q", "quit", "exit"):
@@ -268,6 +271,9 @@ def run_game(
                 continue
             out.write(f"Undid {action} {cell_label(cell)}.\n")
             redraw = True
+            continue
+        if cmd in ("h", "hint"):
+            out.write(_hint_text(board, hints_seen) + "\n")
             continue
         if cmd in ("s", "save"):
             path = save_game(board, ctx.environ)
@@ -314,9 +320,13 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     if not board.config.ranked:
         out.write("Custom boards are not ranked.\n")
         return 0
+    used = []
     if board.undos:
-        times = "once" if board.undos == 1 else f"{board.undos} times"
-        out.write(f"You used undo {times}, so this game is not ranked.\n")
+        used.append("undo " + ("once" if board.undos == 1 else f"{board.undos} times"))
+    if board.hints:
+        used.append("1 hint" if board.hints == 1 else f"{board.hints} hints")
+    if used:
+        out.write(f"You used {' and '.join(used)}, so this game is not ranked.\n")
         return 0
     try:
         rank = record_score(
@@ -331,6 +341,35 @@ def _finish(board: Board, ctx: _Context, from_save: bool) -> int:
     else:
         out.write(f"New best time #{rank} for {board.config.difficulty}!\n")
     return 0
+
+
+def _hint_text(board: Board, seen: set) -> str:
+    """Answer the ``h`` command.
+
+    Only a hint that names a cell is counted, and asking again for the same
+    hint in the same position (without a move in between) is not counted twice.
+    """
+    if not board.revealed:
+        return "No hint needed yet: your first reveal is always safe."
+    hint = suggest(board)
+    if hint is None:
+        return (
+            "No certain move: nothing on the board proves a cell safe or a mine, "
+            "so you have to guess."
+        )
+    key = (frozenset(board.revealed), frozenset(board.flagged), hint)
+    if key not in seen:
+        seen.add(key)
+        board.hints += 1
+    label = cell_label(hint.cell)
+    if hint.action == REVEAL:
+        what = f"{label} is safe. Reveal it: r {label}"
+    elif hint.action == FLAG:
+        what = f"{label} is a mine. Flag it: f {label}"
+    else:
+        what = f"{label} is flagged but safe. Unflag it: f {label}"
+    count = "1 hint" if board.hints == 1 else f"{board.hints} hints"
+    return f"Hint ({hint.rule} rule): {what}  ({count} used, so this game is not ranked)"
 
 
 def _isatty(stream: TextIO) -> bool:

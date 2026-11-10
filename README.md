@@ -48,6 +48,7 @@ Columns are letters (`A`, `B`, ... `Z`, `AA`, ...), rows are numbers starting at
 | `f B3` | Flag or unflag a hidden cell you think is a mine. |
 | `c B3` | Chord: on a revealed number whose mines are all flagged, reveal every other neighbour at once. A wrong flag means you lose. |
 | `u` | Undo your last move (reveal, flag or chord). Repeat to go further back. |
+| `h` | Hint: show one move the board proves is right. A hinted game is not ranked. |
 | `s` | Save the game and quit. Continue later with `minesweep resume`. |
 | `q` | Quit without saving. |
 | `?` | Show the help. |
@@ -60,7 +61,7 @@ Rules in short:
 - You win when every safe cell is revealed (flags are optional). The clock
   starts on your first reveal.
 - Only the standard difficulties are ranked in `minesweep scores`; custom
-  boards are not.
+  boards, and games where you used undo or a hint, are not.
 
 Invalid boards are refused with a clear message and exit code 2, for example
 `minesweep play --width 3 --height 3 --mines 9` prints
@@ -316,12 +317,116 @@ Mines left: 9   Time: 0s
 > Quit without saving.
 ```
 
-### Solver (for hints, coming next)
+### Hints
+
+Stuck? Type `h` and the game names one move the visible board proves is
+right, together with the solver rule that proves it (see the table below):
+
+- a hidden cell that is certainly safe (`r` it), or failing that
+- a flag you placed on a cell that is certainly safe (take it off: a wrong
+  flag makes a chord lose), or failing that
+- a cell that is certainly a mine (`f` it).
+
+Among equal choices it picks the cell closest to your last move. The hint only
+uses what you can see, never where the mines really are, so when nothing is
+certain it says so and the next move is a guess. Before your first reveal
+there is nothing to hint: the first reveal is always safe.
+
+A game in which you took a hint is not ranked. The status line shows how many
+hints you used, and the count is kept in the save file (saves from earlier
+versions load with 0). Asking again in the same position, without a move in
+between, gives the same hint and is not counted twice; a "no certain move"
+answer is not counted at all. `?` (or `help`) shows the command list.
+
+Real captured session (`--seed 1`, moves piped in, `MINESWEEP_HOME` set to a
+temporary `demo-home`):
+
+```text
+$ printf 'h\nr E5\nh\nh\nr H2\nf A9\nh\ns\n' | minesweep play --seed 1
+New game: beginner 9x9, 10 mines, seed 1. Type ? for help.
+  A B C D E F G H I
+1 . . . . . . . . .
+2 . . . . . . . . .
+3 . . . . . . . . .
+4 . . . . . . . . .
+5 . . . . . . . . .
+6 . . . . . . . . .
+7 . . . . . . . . .
+8 . . . . . . . . .
+9 . . . . . . . . .
+Mines left: 10   Time: 0s
+> h
+No hint needed yet: your first reveal is always safe.
+> r E5
+  A B C D E F G H I
+1           2 . . .
+2           2 . . .
+3           1 1 4 .
+4               2 .
+5        [ ]    1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+Mines left: 10   Time: 0s
+> h
+Hint (single rule): H2 is safe. Reveal it: r H2  (1 hint used, so this game is not ranked)
+> h
+Hint (single rule): H2 is safe. Reveal it: r H2  (1 hint used, so this game is not ranked)
+> r H2
+  A B C D E F G H I
+1           2 . . .
+2           2 .[5].
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9 . . . . . . . 1
+Mines left: 10   Time: 0s   Hints: 1
+> f A9
+  A B C D E F G H I
+1           2 . . .
+2           2 . 5 .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9[F]. . . . . . 1
+Mines left: 9   Time: 0s   Hints: 1
+> h
+Hint (single rule): B9 is safe. Reveal it: r B9  (2 hints used, so this game is not ranked)
+> s
+Game saved to demo-home\save.json. Continue with: minesweep resume
+$ minesweep resume
+Resuming: beginner 9x9, 10 mines, seed 1. Type ? for help.
+  A B C D E F G H I
+1           2 . . .
+2           2 . 5 .
+3           1 1 4 .
+4               2 .
+5               1 1
+6     1 1 1
+7     2 . 2 1 1 1
+8 1 1 2 . . . . 1
+9[F]. . . . . . 1
+Mines left: 9   Time: 0s   Hints: 2
+> q
+Quit without saving. Your earlier save is still there.
+```
+
+After `f A9` the hint moves to B9, right next to the flag, rather than a safe
+cell further away.
+
+### Solver
 
 `minesweep.solver.analyze(board)` works out which hidden cells the visible
-board *proves* safe and which it proves are mines. It is the groundwork for
-the `h` hint command on the [roadmap](ROADMAP.md) and is not wired into the
-game yet, but you can call it on any board, including a saved game. It only
+board *proves* safe and which it proves are mines. The `h` hint command above
+is built on it, and you can also call it yourself on any board, including a
+saved game. It only
 uses what a player can see: the numbers on revealed cells and the total mine
 count. It never peeks at where the mines are, and it ignores your flags (a
 flag is a guess, not a fact). Each answer names the rule that found it:

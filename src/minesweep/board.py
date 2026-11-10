@@ -151,7 +151,9 @@ class Board:
     returns seconds (monotonic); the timer starts at the first reveal.
 
     Every accepted move is kept in ``history`` so :meth:`undo` can take the
-    last one back; ``undos`` counts how often that happened.
+    last one back; ``undos`` counts how often that happened. ``hints`` counts
+    the hints the player asked for (the solver lives in :mod:`minesweep.solver`;
+    the board only keeps the tally so it survives a save).
     """
 
     def __init__(self, config: Config, seed: int, clock: Clock = time.monotonic):
@@ -168,6 +170,7 @@ class Board:
         self._started: float | None = None
         self.history: list[Move] = []
         self.undos = 0
+        self.hints = 0
         self._fixed_mines = False
         # Position that ``history`` starts from: empty for a new game, or what
         # an old (version 1) save held, since its earlier moves are unknown.
@@ -433,6 +436,7 @@ class Board:
             "elapsed": round(self.elapsed, 3),
             "history": [[action, x, y] for action, (x, y) in self.history],
             "undos": self.undos,
+            "hints": self.hints,
             "base_revealed": sorted(self.base_revealed),
             "base_flagged": sorted(self.base_flagged),
         }
@@ -484,6 +488,9 @@ class Board:
             board.undos = int(data.get("undos", 0))
             if board.undos < 0:
                 raise ValueError("undos cannot be negative")
+            board.hints = int(data.get("hints", 0))  # absent before v0.3 hints
+            if board.hints < 0:
+                raise ValueError("hints cannot be negative")
             _check_history(board)
             if state == PLAYING and board.mines_placed:
                 board._started = clock()

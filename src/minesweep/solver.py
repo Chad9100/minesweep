@@ -283,3 +283,51 @@ def _enumerate_group(
         for i, c in enumerate(order)
         if mine_hits[i] in (0, solutions)
     }
+
+
+# ----------------------------------------------------------------------- hints
+
+REVEAL = "reveal"      # a hidden, unflagged cell that is certainly safe
+UNFLAG = "unflag"      # a flagged cell that is certainly safe (the flag is wrong)
+FLAG = "flag"          # a hidden, unflagged cell that is certainly a mine
+
+
+@dataclass(frozen=True)
+class Hint:
+    """One suggested move: ``action`` is :data:`REVEAL`, :data:`UNFLAG` or
+    :data:`FLAG`, ``rule`` is the solver rule that proves it."""
+
+    action: str
+    cell: Cell
+    rule: str
+
+
+def suggest(board: Board, *, step_budget: int = DEFAULT_STEP_BUDGET) -> Hint | None:
+    """Pick the most useful certain move on the visible board, or None.
+
+    Priority: reveal a safe cell (it makes progress), then remove a flag the
+    board proves wrong (a wrong flag loses a chord), then flag a certain mine.
+    Among equals the cell closest to the last move wins (ties: top row first,
+    then leftmost), so the hint lands where the player is looking. Returns
+    None before the first reveal, after the game, and when every remaining
+    move is a guess. Like :func:`analyze`, it never looks at ``board.mines``.
+    """
+    result = analyze(board, step_budget=step_budget)
+    groups = (
+        (REVEAL, {c: r for c, r in result.safe.items() if c not in board.flagged}),
+        (UNFLAG, {c: r for c, r in result.safe.items() if c in board.flagged}),
+        (FLAG, {c: r for c, r in result.mines.items() if c not in board.flagged}),
+    )
+    last = board.last_move
+    anchor = last[1] if last else None
+
+    def key(cell: Cell) -> tuple[int, int, int]:
+        x, y = cell
+        dist = max(abs(x - anchor[0]), abs(y - anchor[1])) if anchor else 0
+        return (dist, y, x)
+
+    for action, found in groups:
+        if found:
+            cell = min(found, key=key)
+            return Hint(action, cell, found[cell])
+    return None

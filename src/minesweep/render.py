@@ -133,7 +133,10 @@ def _cell(board: Board, cell: tuple[int, int], g: Glyphs, show_mines: bool) -> t
 
 
 def render_status(board: Board) -> str:
-    return f"Mines left: {board.mines_left}   Time: {int(board.elapsed)}s"
+    status = f"Mines left: {board.mines_left}   Time: {int(board.elapsed)}s"
+    if board.hints:
+        status += f"   Hints: {board.hints}"
+    return status
 
 
 def format_seconds(seconds: float) -> str:

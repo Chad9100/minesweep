@@ -21,8 +21,10 @@ Estimates are rough working hours for one person, including tests and docs.
 
 - [x] Constraint solver that finds certainly-safe cells and certain mines (3 h)
       (`minesweep.solver.analyze`: single, subset, mine-total and enumeration rules;
-      not yet wired into the game, that is the `h` item below)
-- [ ] `h` hint command built on it; hinted games are marked and not ranked (1 h)
+      wired into the game by the `h` item below)
+- [x] `h` hint command built on it; hinted games are marked and not ranked (1 h)
+      (safe reveal first, then a provably wrong flag, then a certain mine; nearest
+      the last move; the hint count is shown in the status line and saved)
 - [ ] Optional "no guessing" boards: re-roll placement until the solver can finish (1 h)
 
 ## v0.4 - daily seeded challenge (~3 h)
@@ -51,4 +53,4 @@ Estimates are rough working hours for one person, including tests and docs.
 - [ ] Trusted-publishing release workflow and a `minesweep-cli` PyPI release (1 h)
 - [ ] Changelog, versioned save format migration, final docs pass (1 h)
 
-**Total remaining: about 20 hours.**
+**Total remaining: about 19 hours.**
