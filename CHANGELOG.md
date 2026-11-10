@@ -19,6 +19,9 @@ below has a release number; the headings follow the roadmap stages.
 - Statistics per difficulty, `minesweep stats` and `--reset` for scores,
   daily results and stats.
 - `--tui` full-screen curses mode with keyboard, mouse and colour.
+- `minesweep export [FILE]` and `minesweep import FILE` to move best times,
+  daily results and statistics between machines; importing merges and can be
+  repeated safely.
 - A `version` field in `scores.json`, `daily.json` and `stats.json`; a file
   written by a newer minesweep is refused with a clear message instead of being
   overwritten. Files without the field (all earlier ones) load as version 1.

@@ -371,3 +371,75 @@ def reset_daily(environ: Mapping[str, str] | None = None) -> bool:
 def reset_stats(environ: Mapping[str, str] | None = None) -> bool:
     """Delete the per-difficulty statistics. Returns False if there were none."""
     return _remove(stats_path(environ))
+
+
+# ------------------------------------------------------------ export and import
+
+EXPORT_FORMAT = "minesweep-records"
+
+
+def export_records(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Best times, daily results and statistics as one JSON-ready document."""
+    return {
+        "format": EXPORT_FORMAT,
+        "version": RECORD_VERSION,
+        "scores": load_scores(environ),
+        "daily": load_daily(environ),
+        "stats": load_stats(environ),
+    }
+
+
+def import_records(data: Any, environ: Mapping[str, str] | None = None) -> dict[str, int]:
+    """Merge an exported document into the local records.
+
+    Merging can be repeated safely: best times are combined (identical entries
+    are kept once) and trimmed to the top 10; a daily result already stored
+    locally wins over the imported one for the same day; statistics keep, per
+    difficulty, whichever record has more games played. Returns how many best
+    times and daily results were added and how many difficulties' statistics
+    were replaced.
+    """
+    if not isinstance(data, dict) or data.get("format") != EXPORT_FORMAT:
+        raise StorageError("not a minesweep export file")
+    _check_record_version(Path("the export file"), data)
+    for key in ("scores", "daily", "stats"):
+        if not isinstance(data.get(key, {}), dict):
+            raise StorageError(f"the export file's {key!r} entry is not an object")
+
+    scores = load_scores(environ)
+    daily = load_daily(environ)
+    stats = load_stats(environ)
+    added_scores = added_daily = replaced_stats = 0
+
+    for name in DIFFICULTIES:
+        incoming = data.get("scores", {}).get(name, [])
+        if not isinstance(incoming, list):
+            raise StorageError(f"the export file's scores for {name} are not a list")
+        merged = list(scores[name])
+        for e in incoming:
+            if isinstance(e, dict) and isinstance(e.get("seconds"), (int, float)) and not isinstance(e["seconds"], bool):
+                if e not in merged:
+                    merged.append(e)
+        merged.sort(key=lambda e: e["seconds"])  # stable: local ties stay ahead
+        merged = merged[:MAX_SCORES]
+        added_scores += sum(1 for e in merged if e not in scores[name])
+        scores[name] = merged
+
+        days = data.get("daily", {}).get(name, {})
+        if not isinstance(days, dict):
+            raise StorageError(f"the export file's daily results for {name} are not an object")
+        for day, e in days.items():
+            if day not in daily[name] and _valid_daily_entry(e):
+                daily[name][day] = e
+                added_daily += 1
+        daily[name] = dict(sorted(daily[name].items()))
+
+        theirs = _clean_stats(data.get("stats", {}).get(name))
+        if theirs["played"] > stats[name]["played"]:
+            stats[name] = theirs
+            replaced_stats += 1
+
+    _write_json(scores_path(environ), _stamped(scores))
+    _write_json(daily_path(environ), _stamped(daily))
+    _write_json(stats_path(environ), _stamped(stats))
+    return {"scores": added_scores, "daily": added_daily, "stats": replaced_stats}

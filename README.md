@@ -44,6 +44,7 @@ minesweep play --seed 1 --no-echo < moves.txt   # scripted: don't repeat piped c
 minesweep scores                            # best times per difficulty
 minesweep scores --daily                    # your daily challenge results
 minesweep stats                             # games played, win rate, streaks
+minesweep export records.json               # records to one file; `import` merges it back
 minesweep scores --reset                    # start the best times over (asks first)
 ```
 
@@ -681,6 +682,28 @@ Nothing deleted.
 $ minesweep stats --reset --yes
 Deleted your statistics.
 ```
+
+### Moving records between machines
+
+`minesweep export` writes your best times, daily results and statistics to one
+JSON file (or to standard output without a file name); `minesweep import`
+merges such a file into the records on another machine. Saved games are not
+included.
+
+```text
+$ minesweep export records.json
+Exported your records to records.json.
+$ minesweep import records.json
+Imported 1 best time(s) and 0 daily result(s); statistics replaced for 1 difficulty(ies).
+$ minesweep import records.json
+Imported 0 best time(s) and 0 daily result(s); statistics replaced for 0 difficulty(ies).
+```
+
+Importing is safe to repeat: best times are combined (identical entries kept
+once, top 10 per difficulty), a daily result you already have for a day is
+kept, and for statistics the side with more games played wins per difficulty
+(counts are not added together). A file that is not an export, or was written
+by a newer minesweep, is refused and nothing is changed.
 
 ### Full-screen mode
 

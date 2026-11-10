@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import sys
@@ -37,6 +38,10 @@ from minesweep.solver import FLAG, REVEAL, suggest
 from minesweep.storage import (
     StorageError,
     daily_leaderboard,
+    export_records,
+    import_records,
+    export_records,
+    import_records,
     data_dir,
     delete_save,
     load_daily,
@@ -142,6 +147,21 @@ def build_parser() -> argparse.ArgumentParser:
         "winning time per difficulty.",
     )
     _add_reset_args(stats, "your statistics")
+    export = sub.add_parser(
+        "export",
+        help="write best times, daily results and statistics to one JSON file",
+        description="Write your records to one JSON file (or to standard output), "
+        "for moving them to another machine with `minesweep import`.",
+    )
+    export.add_argument("file", nargs="?", default="-", help="output file (default: standard output)")
+    imp = sub.add_parser(
+        "import",
+        help="merge records from a file written by `minesweep export`",
+        description="Merge an export file into your records. Safe to repeat: best "
+        "times are combined (top 10 kept), an existing daily result for a day is "
+        "kept, and statistics keep whichever side has more games played.",
+    )
+    imp.add_argument("file", help="file written by `minesweep export`")
     return parser
 
 
@@ -186,6 +206,10 @@ def main(
             return _cmd_daily(args, ctx)
         if args.command == "resume":
             return _cmd_resume(args, ctx)
+        if args.command == "export":
+            return _cmd_export(args, ctx)
+        if args.command == "import":
+            return _cmd_import(args, ctx)
         if args.command == "stats":
             if args.reset:
                 return _cmd_reset(ctx, "your statistics", reset_stats, args.yes)
@@ -345,6 +369,44 @@ def _cmd_stats(ctx: _Context) -> int:
     if total["played"]:
         pct = int(100 * total["won"] / total["played"])
         out.write(f"\n  all: {total['played']} played, {total['won']} won ({pct}%)\n")
+    return 0
+
+
+def _cmd_export(args: argparse.Namespace, ctx: _Context) -> int:
+    try:
+        text = json.dumps(export_records(ctx.environ), indent=2) + "\n"
+    except StorageError as exc:
+        ctx.err(str(exc))
+        return 1
+    if args.file == "-":
+        ctx.stdout.write(text)
+        return 0
+    try:
+        with open(args.file, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    except OSError as exc:
+        ctx.err(f"cannot write {args.file}: {exc}")
+        return 1
+    ctx.stdout.write(f"Exported your records to {args.file}.\n")
+    return 0
+
+
+def _cmd_import(args: argparse.Namespace, ctx: _Context) -> int:
+    try:
+        with open(args.file, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        ctx.err(f"cannot read {args.file}: {exc}")
+        return 1
+    try:
+        added = import_records(data, ctx.environ)
+    except StorageError as exc:
+        ctx.err(f"{args.file}: {exc}")
+        return 1
+    ctx.stdout.write(
+        f"Imported {added['scores']} best time(s) and {added['daily']} daily result(s); "
+        f"statistics replaced for {added['stats']} difficulty(ies).\n"
+    )
     return 0
 
 
